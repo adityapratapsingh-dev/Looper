@@ -111,6 +111,11 @@ Node sandbox and asserts every view `route()` dispatches to is reachable at glob
 scope — this catches the "view nested inside another function" class of bug, which
 `node --check` alone does not.
 
+CI runs this suite and the linter on every push and pull request
+(`.github/workflows/ci.yml`). Dependabot keeps dependencies current and its pull
+requests are merged automatically once CI passes
+(`.github/workflows/dependabot-automerge.yml`).
+
 ## Docs
 
 - `docs/PLATFORM.md` — the platform's design and how to swap in a database.

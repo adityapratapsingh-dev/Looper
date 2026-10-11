@@ -21,7 +21,6 @@ pyproject.toml
 requirements.txt
 
 # Repo extras not needed at runtime
-ci
 tests
 examples
 docs

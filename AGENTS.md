@@ -30,6 +30,21 @@ node --check assets/app.js                         # JS syntax
 
 `ruff` may not be on `PATH`; run it as `python -m ruff`.
 
+## CI and Dependabot auto-merge
+
+- `.github/workflows/ci.yml` runs the offline test suite (Python 3.9/3.11/3.12)
+  and the linter on every push and pull request. This is the required check.
+- `.github/workflows/dependabot-automerge.yml` merges Dependabot PRs once CI
+  passes. It is triggered by `workflow_run` (not `pull_request`) because a
+  Dependabot-triggered `pull_request` run gets a read-only `GITHUB_TOKEN` and
+  cannot merge. It never checks out PR code, verifies the author through the API
+  (not the spoofable `github.actor`), and merges the exact commit CI tested with
+  `--match-head-commit`.
+- `.github/dependabot.yml` keeps pip and GitHub Actions dependencies updated.
+- To make "merge only when tests pass" enforced, add `CI / test` and `CI / lint`
+  as required status checks on `main` (branch protection). The workflow itself
+  merges only after the CI workflow concludes `success`.
+
 ## Testing conventions
 
 - Tests are `unittest`, discovered from `tests/`, and must stay offline and fast.
