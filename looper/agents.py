@@ -1,15 +1,18 @@
-"""Agent runtime: how an agent decides what to post and reply.
-
-Two paths, chosen automatically:
-
-* **LLM-backed** — if the agent's ``provider`` is a real model (``openai``,
-  ``anthropic``, ``hf`` …) the persona is used as a system prompt and the
-  response is posted verbatim.
-* **Offline persona voice** — with the default ``echo`` provider (or if the LLM
-  call fails) a deterministic, persona-flavoured generator produces a plausible
-  post so the platform works with no API keys and no network.
+"""Agent runtime: how an agent decides what to post, reply and message.
 
 Agents are ordinary users, so everything here is just "how a user writes".
+There are two ways an agent can be voiced:
+
+* **Offline persona voice** — the default. A deterministic, persona-flavoured
+  generator produces a plausible post from the agent's topic, bio and persona.
+  It needs no network, no API keys and no model, so the whole platform runs
+  anywhere. This is what keeps the feed alive out of the box.
+* **Custom voice** — a caller can inject a ``voice`` callable (see
+  :meth:`AgentRuntime.set_voice`). A deployment that wants to plug in its own
+  model supplies one callable; the platform itself stays model-agnostic.
+
+Nothing here imports a model stack: the platform is a social network, not an
+ML pipeline. The offline voice is the default; a caller may replace it.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import random
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
 
 from .models import Post, User
 
@@ -25,48 +28,90 @@ __all__ = ["AgentRuntime"]
 
 _MAX_LEN = 480
 
+# A voice takes (agent, kind, context) and returns text (or None to fall back).
+Voice = Callable[[User, str, Dict[str, Any]], Optional[str]]
+
 _OPENERS = [
     "Quick note:", "Reminder:", "Field report:", "Pattern I keep seeing:",
-    "TIL:", "Opinion:", "Small win:", "Thread incoming:", "Hot take:",
+    "TIL:", "Opinion:", "Small win:", "Hot take:", "Unpopular view:",
 ]
 
 _TOPIC_LINES = {
-    "distillation": [
-        "the student only needs the teacher's *soft* distribution — hard labels throw away the dark knowledge.",
-        "sweep the temperature before you touch the architecture. T is free quality.",
-        "response distillation scales further than logit distillation when you don't own the teacher weights.",
-        "if teacher and student tokenizers differ, align vocabularies and renormalise the teacher over the shared support.",
-        "distil first, then quantize. Reversing that order costs accuracy you can't buy back.",
+    "running": [
+        "easy pace is not a wasted run — it is the run that lets you train tomorrow.",
+        "the long run is a conversation with your future self. Keep it honest and slow.",
+        "pace on feel, not on the watch. The watch lies when you are tired.",
+        "hills build the engine. Flat miles just cash the cheque.",
+        "rest days are training days. You cannot outrun recovery.",
     ],
-    "agent": [
-        "trajectories are the dataset: log tool calls, results and the reasoning between them.",
-        "filter agent runs by outcome before you train on them. Bad trajectories teach bad habits.",
-        "an agent that can't explain its tool choice is an agent you can't distil.",
-        "behaviour cloning works best when you supervise every assistant turn, not just the final answer.",
-        "give the agent fewer, sharper tools. Tool sprawl is where reliability goes to die.",
+    "football": [
+        "the best teams press as one and rest as one. Shape beats heroics.",
+        "watch the space, not the ball. The ball tells you where it has been.",
+        "a good first touch buys you a second of time — that is the whole game.",
+        "set pieces win tight games. Practice them like they matter, because they do.",
+        "the counter-attack starts the moment you win it back, not when you cross halfway.",
     ],
-    "quantization": [
-        "4-bit weights plus a good adapter beats 8-bit alone at the same memory.",
-        "measure quality per FLOP, not raw benchmark score. That's the number that ships.",
-        "LoRA rank is a hyperparameter you should actually tune — r=16 is a default, not a law.",
-        "quantization is a compression budget. Spend it where the teacher disagrees with the student.",
+    "coffee": [
+        "grind size fixes more bad coffee than any expensive machine ever will.",
+        "fresh beans beat fancy gear, every single time. Check the roast date.",
+        "dial in one variable at a time. Change two and you learn nothing.",
+        "water matters. If it tastes off from the tap, it will taste off in the cup.",
+        "a cheap scale changed my coffee more than a new grinder did.",
+    ],
+    "cycling": [
+        "cadence over grind. Spin the climbs and save the legs for the descent.",
+        "the wind is never neutral. Check the forecast before you plan the route.",
+        "a clean chain is free watts. Ten minutes of maintenance, real speed.",
+        "eat before you are hungry and drink before you are thirsty.",
+        "the best ride is the one you actually go on. Consistency beats intensity.",
+    ],
+    "photography": [
+        "the light does the heavy lifting. Chase the hour after sunrise, not the gear.",
+        "get closer. Then get closer again. Most photos fail by standing too far back.",
+        "shoot the scene you feel, not the one you think others want to see.",
+        "learn one lens properly before you buy a second one.",
+        "the frame is a decision. What you leave out matters as much as what you keep.",
+    ],
+    "books": [
+        "abandon a book you are not enjoying. Life is short and the shelf is long.",
+        "reading is a conversation. Argue with the margin, not just the page.",
+        "slow reading beats speed reading for anything you actually want to keep.",
+        "reread the good ones. A book changes when you do.",
+        "carry a book everywhere. Waiting rooms become libraries.",
+    ],
+    "music": [
+        "learn the whole song, not just the riff. The boring parts teach you timing.",
+        "practice slow enough that you never make the mistake. Speed comes for free.",
+        "listen to the bass line first. It tells you what the song is actually doing.",
+        "a metronome is the cheapest teacher you will ever hire.",
+        "play for the room, not for the mirror.",
     ],
     "generic": [
-        "small models are not worse, they are differently constrained.",
-        "the best eval is the one you'd bet on.",
-        "shipping beats benchmarking, but you need both.",
-        "most quality regressions are data problems wearing a model costume.",
+        "consistency is the whole trick. Show up when it is not fun.",
+        "the best gear is the gear you actually use.",
+        "most progress is boring. That is why it works.",
+        "start badly, then start again tomorrow. That is the entire method.",
+        "you do not need permission to begin.",
     ],
 }
 
 _CLOSERS = [
-    "", "", " Happy to go deeper.",
-    " Ask me anything about it.",
-    " Curious whether others see the same.",
-    " YMMV, but it's held up for us.",
+    "", "", " Happy to talk about it.",
+    " Curious what others think.",
+    " YMMV, but it has held up for me.",
+    " Ask me anything.",
 ]
 
-_ENV_FOR = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY"}
+# Topic keyword -> the flavour bucket used by the offline voice.
+_TOPIC_HINTS = {
+    "running": ("run", "running", "marathon", "5k", "10k", "pace", "jog", "trail"),
+    "football": ("football", "soccer", "match", "tactics", "pressing", "midfield", "goal"),
+    "coffee": ("coffee", "espresso", "brew", "roast", "beans", "latte", "filter"),
+    "cycling": ("cycl", "bike", "bicycle", "ride", "climb", "cadence", "watts"),
+    "photography": ("photo", "camera", "lens", "shoot", "aperture", "film", "light"),
+    "books": ("book", "read", "novel", "author", "shelf", "essay", "chapter"),
+    "music": ("music", "guitar", "song", "band", "practice", "metronome", "bass"),
+}
 
 
 def _seed(*parts: str) -> random.Random:
@@ -76,12 +121,9 @@ def _seed(*parts: str) -> random.Random:
 
 def _topic_key(text: str) -> str:
     t = (text or "").lower()
-    if "distil" in t or "teacher" in t or "student" in t:
-        return "distillation"
-    if "agent" in t or "tool" in t or "trajector" in t:
-        return "agent"
-    if "quant" in t or "lora" in t or "4-bit" in t or "efficien" in t:
-        return "quantization"
+    for key, hints in _TOPIC_HINTS.items():
+        if any(h in t for h in hints):
+            return key
     return "generic"
 
 
@@ -93,84 +135,54 @@ def _clean(text: str) -> str:
 
 
 class AgentRuntime:
-    def __init__(self, store: Any, provider_factory: Optional[Any] = None) -> None:
+    """Produces an agent's posts, replies and messages."""
+
+    def __init__(self, store: Any, voice: Optional[Voice] = None) -> None:
         self.store = store
-        self._provider_factory = provider_factory
-        self._providers: Dict[str, Any] = {}
+        self._voice = voice
 
-    # -- provider plumbing -------------------------------------------------
-    def _provider_for(self, agent: User) -> Optional[Any]:
-        if agent.provider in ("", "echo", None):
-            return None  # offline persona voice
-        if agent.provider in self._providers:
-            return self._providers[agent.provider]
-        try:
-            if self._provider_factory is None:
-                from distill.providers.factory import build_provider
+    def set_voice(self, voice: Optional[Voice]) -> None:
+        """Install a custom voice for every agent (``None`` restores offline)."""
 
-                factory = build_provider
-            else:
-                factory = self._provider_factory
-            provider = factory(
-                {
-                    "provider": agent.provider,
-                    "model": agent.model,
-                    "api_key_env": _ENV_FOR.get(agent.provider, ""),
-                }
-            )
-            self._providers[agent.provider] = provider
-            return provider
-        except Exception:  # noqa: BLE001 - fall back to offline voice
-            return None
+        self._voice = voice
 
     # -- generation --------------------------------------------------------
     def compose_post(self, agent: User, topic: Optional[str] = None) -> str:
-        subject = topic or agent.topic or agent.bio or "model distillation"
-        provider = self._provider_for(agent)
-        if provider is not None:
-            text = self._llm(
-                provider,
-                agent,
-                f"Write a single social post (max 280 chars) about {subject}. "
-                "No preamble, no quotes, no markdown headers.",
-            )
-            if text:
-                return _clean(text)
+        subject = topic or agent.topic or agent.bio or "this"
+        custom = self._voice_text(agent, "post", {"subject": subject})
+        if custom:
+            return custom
         return self._offline_post(agent, subject)
 
     def compose_reply(self, agent: User, post: Post, author: User) -> str:
-        provider = self._provider_for(agent)
-        if provider is not None:
-            text = self._llm(
-                provider,
-                agent,
-                f"@{author.handle} posted:\n\"{post.text}\"\n\n"
-                "Reply with one helpful, specific social post (max 280 chars). "
-                "No preamble or quotes.",
-            )
-            if text:
-                return _clean(text)
+        custom = self._voice_text(
+            agent, "reply", {"text": post.text, "author": author.handle}
+        )
+        if custom:
+            return custom
         return self._offline_reply(agent, post, author)
 
-    def _llm(self, provider: Any, agent: User, instruction: str) -> Optional[str]:
-        try:
-            from distill.types import ChatMessage, SamplingParams
+    def compose_dm(self, agent: User, message: str) -> str:
+        """An agent's reply inside a direct-message conversation."""
 
-            messages: List[Any] = []
-            if agent.persona:
-                messages.append(ChatMessage.system(agent.persona))
-            messages.append(ChatMessage.user(instruction))
-            completion = provider.chat(
-                messages, params=SamplingParams(temperature=0.8, max_tokens=120)
-            )
-            return (completion.text or "").strip()
+        custom = self._voice_text(agent, "dm", {"message": message})
+        if custom:
+            return custom
+        return self._offline_dm(agent, message)
+
+    def _voice_text(self, agent: User, kind: str, context: Dict[str, Any]) -> Optional[str]:
+        if self._voice is None:
+            return None
+        try:
+            text = self._voice(agent, kind, context)
         except Exception:  # noqa: BLE001 - never break the request path
             return None
+        return _clean(text) if text else None
 
     # -- offline persona voice --------------------------------------------
     def _offline_post(self, agent: User, subject: str) -> str:
         rng = _seed(agent.handle, subject, str(len(self.store.posts)))
-        key = _topic_key(f"{agent.topic} {agent.persona} {subject}")
+        key = _topic_key(f"{agent.topic} {agent.bio} {agent.persona} {subject}")
         opener = rng.choice(_OPENERS)
         line = rng.choice(_TOPIC_LINES[key])
         closer = rng.choice(_CLOSERS)
@@ -180,7 +192,7 @@ class AgentRuntime:
 
     def _offline_reply(self, agent: User, post: Post, author: User) -> str:
         rng = _seed(agent.handle, post.id, author.handle)
-        key = _topic_key(post.text or agent.topic)
+        key = _topic_key(f"{post.text} {agent.topic}")
         line = rng.choice(_TOPIC_LINES[key])
         lead = rng.choice(
             [
@@ -192,3 +204,16 @@ class AgentRuntime:
         )
         return _clean(f"{lead} {line}")
 
+    def _offline_dm(self, agent: User, message: str) -> str:
+        rng = _seed(agent.handle, "dm", message)
+        key = _topic_key(f"{message} {agent.topic}")
+        line = rng.choice(_TOPIC_LINES[key])
+        lead = rng.choice(
+            [
+                "Thanks for the message —",
+                "Good question.",
+                "Happy to help.",
+                "Short answer:",
+            ]
+        )
+        return _clean(f"{lead} {line}")

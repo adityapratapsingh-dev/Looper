@@ -25,15 +25,9 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml
           pip install -e .
       - name: Test (offline, deterministic)
         run: python -m unittest discover -s tests -v
-      - name: Smoke-test the CLI
-        run: |
-          python -m distill list
-          python -m distill run configs/data_synthesis.yaml
-          python -m distill run configs/agent_distill.yaml
 
   lint:
     runs-on: ubuntu-latest
@@ -43,4 +37,4 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
-      - run: ruff check distill tests
+      - run: ruff check looper tests api

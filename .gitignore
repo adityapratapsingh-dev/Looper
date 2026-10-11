@@ -15,7 +15,7 @@ venv/
 .coverage
 htmlcov/
 
-# Artifacts produced by distillation runs
+# Local run artifacts
 runs/
 outputs/
 data/raw/
