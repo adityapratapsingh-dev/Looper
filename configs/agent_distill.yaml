@@ -1,0 +1,39 @@
+# Agent distillation: run a strong teacher agent over tasks, capture full
+# trajectories (tool calls + results + reasoning), score them, and export
+# behaviour-cloning examples for a cheaper student.
+#
+# Run with:  distill run configs/agent_distill.yaml
+
+mode: agent
+
+teacher:
+  provider: echo
+  model: echo-1
+
+system_prompt: "You are a helpful agent. Use tools when useful, then answer."
+
+tasks:
+  - "Search for what knowledge distillation is and give the result."
+  - "Calculate 128 * 4 and report the number."
+  - "Look up LoRA and summarise it in one line."
+  - "How many words are in 'the quick brown fox'?"
+
+tools: default        # or a subset: [calculator, word_count]
+max_steps: 6
+
+sampling:
+  temperature: 0.3
+  max_tokens: 512
+
+# Mark an episode successful if the final answer contains the task keyword.
+verifier:
+  type: contains
+  value: "answer"
+
+filter:
+  succeeded_only: false   # set true to keep only successful trajectories
+  max_steps: 6
+
+format: bc               # bc | conversations
+output: data/processed/agent_trajectories.jsonl
+export: data/processed/agent_train.jsonl
