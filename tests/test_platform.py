@@ -4,51 +4,55 @@ import unittest
 
 from looper.agents import AgentRuntime
 from looper.api import make_app
-from looper.models import Kind
+from looper.models import Kind, Post, User
 from looper.service import Service, serialize_post, serialize_user
 from looper.store import Store
 
 
 def fresh_service():
-    return Service(Store(seed=True))
+    """An empty network with one human ("you") and one agent ("distilla")."""
+    svc = Service(Store())
+    svc.register_user({"handle": "you", "display_name": "You"})
+    svc.register_user({"handle": "ada", "display_name": "Ada Chen"})
+    svc.register_agent({"handle": "distilla", "display_name": "Distilla", "topic": "knowledge distillation", "persona": "You are concise and technical.", "as": "you"})
+    return svc
 
 
 class StoreTest(unittest.TestCase):
     def setUp(self):
-        self.store = Store(seed=True)
+        self.svc = fresh_service()
+        self.store = self.svc.store
 
-    def test_seed_creates_both_kinds(self):
-        stats = self.store.stats()
-        self.assertGreaterEqual(stats["humans"], 1)
-        self.assertGreaterEqual(stats["agents"], 2)
-        self.assertGreater(stats["posts"], 0)
+    def test_store_starts_empty(self):
+        self.assertEqual(Store().stats()["users"], 0)
 
-    def test_default_viewer_is_human(self):
-        self.assertEqual(self.store.default_viewer().kind, Kind.HUMAN)
+    def test_no_seed_data_is_created(self):
+        self.assertEqual(Store().stats()["posts"], 0)
 
     def test_feed_modes(self):
+        self.svc.create_post("hello distillation", handle="you")
         self.assertGreater(len(self.store.feed(None, "for_you")), 0)
-        self.assertGreater(len(self.store.feed(None, "agents")), 0)
-        viewer = self.store.default_viewer()
-        self.assertGreaterEqual(len(self.store.feed(viewer.id, "following")), 0)
+        self.assertEqual(all(p.author_id == self.store.get_user("distilla").id for p in self.store.feed(None, "agents")), True)
 
     def test_like_and_follow(self):
-        post = self.store.all_posts()[0]
-        viewer = self.store.default_viewer()
-        self.store.like(post.id, viewer.id)
-        self.assertIn(viewer.id, self.store.likers(post.id))
-        self.store.unlike(post.id, viewer.id)
-        self.assertNotIn(viewer.id, self.store.likers(post.id))
-        agent = self.store.list_users(Kind.AGENT)[0]
+        post = self.svc.create_post("a post", handle="ada")["post"]
+        viewer = self.store.get_user("you")
+        self.store.like(post["id"], viewer.id)
+        self.assertIn(viewer.id, self.store.likers(post["id"]))
+        self.store.unlike(post["id"], viewer.id)
+        self.assertNotIn(viewer.id, self.store.likers(post["id"]))
+        agent = self.store.get_user("distilla")
         self.store.follow(viewer.id, agent.id)
         self.assertTrue(self.store.is_following(viewer.id, agent.id))
         self.assertIn(viewer.id, self.store.followers(agent.id))
 
     def test_thread_and_replies(self):
-        root = self.store.all_posts(newest_first=False)[0]
-        self.assertGreaterEqual(len(self.store.thread(root.id)), 1)
+        root = self.svc.create_post("root", handle="you", respond_to_mentions=False)["post"]
+        self.svc.create_post("reply", handle="ada", reply_to=root["id"])
+        self.assertEqual(len(self.store.replies_to(root["id"])), 1)
 
     def test_search_and_trending(self):
+        self.svc.create_post("distillation teaches students", handle="you")
         self.assertTrue(self.store.search("distil"))
         self.assertTrue(self.store.trending(3))
 
@@ -58,42 +62,42 @@ class StoreTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "store.json")
-            s1 = Store(path=path, seed=True)
-            posts = len(s1.posts)
-            s2 = Store(path=path, seed=False)
+            s1 = Store(path=path)
+            s1.add_user(User(handle="you", display_name="You"))
+            s1.add_post(Post(author_id=s1.get_user("you").id, text="persisted"))
+            s2 = Store(path=path)
             self.assertTrue(s2._load())
-            self.assertEqual(len(s2.posts), posts)
+            self.assertEqual(len(s2.posts), 1)
+            self.assertEqual(len(s2.users), 1)
 
 
 class AgentRuntimeTest(unittest.TestCase):
+    def setUp(self):
+        self.svc = fresh_service()
+        self.store = self.svc.store
+        self.agent = self.store.get_user("distilla")
+
     def test_offline_post_is_deterministic(self):
-        store = Store(seed=True)
-        rt = AgentRuntime(store)
-        agent = store.list_users(Kind.AGENT)[0]
-        self.assertEqual(rt.compose_post(agent, "distillation"), rt.compose_post(agent, "distillation"))
-        self.assertTrue(rt.compose_post(agent, "distillation"))
+        rt = AgentRuntime(self.store)
+        self.assertEqual(rt.compose_post(self.agent, "distillation"), rt.compose_post(self.agent, "distillation"))
+        self.assertTrue(rt.compose_post(self.agent, "distillation"))
 
     def test_offline_reply_mentions_author(self):
-        store = Store(seed=True)
-        rt = AgentRuntime(store)
-        agent = store.list_users(Kind.AGENT)[0]
-        author = store.default_viewer()
-        text = rt.compose_reply(agent, store.all_posts()[0], author)
-        self.assertIn(f"@{author.handle}", text)
+        rt = AgentRuntime(self.store)
+        author = self.store.get_user("ada")
+        post = self.svc.create_post("how do I start?", handle="ada", respond_to_mentions=False)["post"]
+        text = rt.compose_reply(self.agent, self.store.get_post(post["id"]), author)
+        self.assertIn("@ada", text)
 
     def test_bad_provider_falls_back(self):
-        store = Store(seed=True)
-        rt = AgentRuntime(store)
-        agent = store.list_users(Kind.AGENT)[0]
-        agent.provider = "does-not-exist"
-        self.assertTrue(rt.compose_post(agent))
+        rt = AgentRuntime(self.store)
+        self.agent.provider = "does-not-exist"
+        self.assertTrue(rt.compose_post(self.agent))
 
     def test_posts_respect_length_cap(self):
-        store = Store(seed=True)
-        rt = AgentRuntime(store)
-        agent = store.list_users(Kind.AGENT)[0]
+        rt = AgentRuntime(self.store)
         for topic in ["a", "b", "c", "distillation", "agents"]:
-            self.assertLessEqual(len(rt.compose_post(agent, topic)), 500)
+            self.assertLessEqual(len(rt.compose_post(self.agent, topic)), 500)
 
 
 class ServiceTest(unittest.TestCase):

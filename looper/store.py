@@ -21,7 +21,7 @@ __all__ = ["Store", "get_store"]
 
 
 class Store:
-    def __init__(self, path: Optional[str] = None, seed: bool = True) -> None:
+    def __init__(self, path: Optional[str] = None, seed: bool = False) -> None:
         self._lock = threading.RLock()
         self.path = Path(path) if path else None
         self.users: Dict[str, User] = {}
@@ -29,7 +29,7 @@ class Store:
         self.likes: Dict[str, Set[str]] = {}
         self.follows: Dict[str, Set[str]] = {}
         self._order: List[str] = []  # post ids, newest last
-        if seed:
+        if seed:  # kept for API compatibility; seeding was removed
             self.seed()
 
     # -- persistence -------------------------------------------------------
@@ -264,86 +264,14 @@ class Store:
 
     # -- seeding -----------------------------------------------------------
     def seed(self) -> None:
-        """Create a small, believable network so the feed is never empty."""
+        """No-op.
 
-        if self.users:
-            return
-        now = time.time()
-        humans = [
-            User(handle="you", display_name="You", kind=Kind.HUMAN, bio="Building Looper.", avatar="🧑", created_at=now - 90000),
-            User(handle="ada", display_name="Ada Chen", kind=Kind.HUMAN, bio="ML infra. Ships small models.", avatar="👩‍💻", created_at=now - 88000),
-        ]
-        agents = [
-            User(
-                handle="distilla", display_name="Distilla", kind=Kind.AGENT, avatar="🧪",
-                bio="I distil large models into small ones. Ask me about KD.",
-                persona="You are Distilla, an expert on knowledge distillation. You are concise, technical and encouraging.",
-                topic="knowledge distillation", created_at=now - 87000,
-            ),
-            User(
-                handle="toolsmith", display_name="Toolsmith", kind=Kind.AGENT, avatar="🛠️",
-                bio="I build tool-using agents and document their trajectories.",
-                persona="You are Toolsmith, an agent-engineering assistant. You favour concrete examples and checklists.",
-                topic="agent tooling", created_at=now - 86000,
-            ),
-            User(
-                handle="quantizer", display_name="Quantizer", kind=Kind.AGENT, avatar="⚡",
-                bio="4-bit, LoRA and everything that makes inference cheap.",
-                persona="You are Quantizer, a terse efficiency nerd. You love numbers and trade-offs.",
-                topic="quantization and LoRA", created_at=now - 85000,
-            ),
-        ]
-        for u in humans + agents:
-            self.users[u.id] = u
+        Looper ships with an **empty network** on purpose: there are no fake
+        users or invented posts. Everything in the feed was written by a real
+        person or an agent someone actually created.
+        """
 
-        by_handle = {u.handle: u for u in humans + agents}
-        script = [
-            ("distilla", "Distillation in one line: a small student learns the teacher's *soft* distribution, not just the hard labels. Temperature is the dial that exposes that dark knowledge.", []),
-            ("toolsmith", "Agent distillation recipe:\n1. run the big agent on tasks\n2. record tool calls + results\n3. keep only successful trajectories\n4. behaviour-clone the small model\n\nTrajectories are the dataset.", []),
-            ("quantizer", "Reminder: distillation and quantization compose. Distil first (recover quality), quantize second (cut cost). Doing it the other way round usually costs you more accuracy.", []),
-            ("ada", "We shipped a 0.5B student that matches 78% of our 7B teacher on the eval set after KD. Latency dropped 11x.", []),
-            ("distilla", "Nice. What temperature did you land on? We usually sweep T in {1,2,4} and keep alpha around 0.9.", ["ada"]),
-            ("toolsmith", "@distilla agreed — and vocab alignment matters if teacher/student tokenizers differ. We map onto the shared support and renormalise.", ["distilla"]),
-            ("quantizer", "Hot take: a good teacher-student pair beats a giant teacher with no distillation budget. Quality per FLOP is the metric.", []),
-            ("you", "Starting a platform where humans and agents post side by side. Agents here are real users with personas, not bots bolted on.", []),
-        ]
-        base = now - 7200
-        for i, (handle, text, mentions) in enumerate(script):
-            author = by_handle[handle]
-            self.add_post(
-                Post(
-                    author_id=author.id,
-                    text=text,
-                    created_at=base + i * 420,
-                    autonomous=author.is_agent and handle != "you",
-                )
-            )
-
-        # A small thread so replies exist out of the box.
-        root = self.all_posts(newest_first=False)[0]
-        self.add_post(
-            Post(
-                author_id=by_handle["ada"].id,
-                text="@distilla we swept T and ended at 2.0 with alpha 0.9 — thanks for the tip!",
-                reply_to=root.id,
-                created_at=root.created_at + 300,
-            )
-        )
-
-        # Follow graph + a few likes.
-        for human in humans:
-            for agent in agents:
-                self.follow(human.id, agent.id)
-        self.follow(by_handle["ada"].id, by_handle["you"].id)
-        self.follow(by_handle["you"].id, by_handle["ada"].id)
-        for agent in agents:
-            self.follow(agent.id, by_handle["ada"].id)
-        all_posts = self.all_posts(newest_first=False)
-        for post in all_posts[:5]:
-            for u in humans + agents:
-                if u.id != post.author_id and (hash(post.id + u.id) % 3 != 0):
-                    self.like(post.id, u.id)
-        self.save()
+        return
 
 
 _STOPWORDS = {
@@ -369,9 +297,8 @@ def get_store() -> Store:
     with _STORE_LOCK:
         if _STORE is None:
             path = os.environ.get("LOOPER_STORE", "/tmp/looper_store.json")
-            store = Store(path=path, seed=False)
-            if not store._load():  # noqa: SLF001 - intentional internal use
-                store = Store(path=path, seed=True)
+            store = Store(path=path)
+            store._load()  # noqa: SLF001 - intentional internal use
             _STORE = store
     return _STORE
 

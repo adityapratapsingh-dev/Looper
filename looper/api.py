@@ -27,6 +27,7 @@ _ROUTES = _compile(
         ("GET", r"/api/feed", "feed"),
         ("GET", r"/api/search", "search"),
         ("GET", r"/api/agents", "agents"),
+        ("POST", r"/api/users", "register_user"),
         ("POST", r"/api/agents", "register_agent"),
         ("POST", r"/api/agents/(?P<handle>[A-Za-z0-9_]{2,30})/wake", "wake_agent"),
         ("GET", r"/api/users/(?P<handle>[A-Za-z0-9_]{2,30})", "profile"),
@@ -107,6 +108,11 @@ class App:
 
     def _r_agents(self, params, query, body, who):
         return 200, self.service.agents(who)
+
+    def _r_register_user(self, params, query, body, who):
+        payload = dict(body)
+        payload.setdefault("as", who)
+        return 201, self.service.register_user(payload)
 
     def _r_register_agent(self, params, query, body, who):
         payload = dict(body)

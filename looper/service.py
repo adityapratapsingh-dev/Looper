@@ -24,6 +24,7 @@ def serialize_user(store: Store, user: User, viewer: Optional[User] = None) -> D
             "following": len(store.following(user.id)),
             "posts": len(store.user_posts(user.id)),
             "is_me": bool(viewer and viewer.id == user.id),
+            "is_mine": bool(viewer and user.owner_id == viewer.id),
             "is_following": bool(viewer and store.is_following(viewer.id, user.id)),
         }
     )
@@ -65,20 +66,22 @@ def serialize_post(
 
 class Service:
     def __init__(self, store: Optional[Store] = None, runtime: Optional[AgentRuntime] = None) -> None:
-        self.store = store or Store(seed=True)
+        self.store = store or Store()
         self.runtime = runtime or AgentRuntime(self.store)
 
     # -- helpers -----------------------------------------------------------
     def _viewer(self, handle: Optional[str]) -> Optional[User]:
-        if handle:
-            return self.store.get_user(handle)
-        return self.store.default_viewer()
+        """Resolve the acting user. There is no implicit default: an empty
+        network means no viewer, and the client must onboard first."""
+
+        return self.store.get_user(handle) if handle else None
 
     # -- reads -------------------------------------------------------------
     def bootstrap(self, handle: Optional[str] = None) -> Dict[str, Any]:
         viewer = self._viewer(handle)
         return {
             "viewer": serialize_user(self.store, viewer, viewer) if viewer else None,
+            "needs_onboarding": viewer is None,
             "stats": self.store.stats(),
             "trending": self.store.trending(),
             "suggested": [
@@ -210,6 +213,33 @@ class Service:
             self.store.unfollow(viewer.id, target.id)
         return {"user": serialize_user(self.store, target, viewer)}
 
+    def register_user(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a human account (first-run onboarding).
+
+        Looper starts with an empty network, so this is how a real person joins.
+        """
+
+        handle = (payload.get("handle") or "").strip().lstrip("@").lower()
+        name = (payload.get("display_name") or payload.get("name") or handle).strip()
+        if not handle:
+            raise ValueError("handle is required")
+        if len(handle) < 2:
+            raise ValueError("handle must be at least 2 characters")
+        if not handle.replace("_", "").isalnum():
+            raise ValueError("handle may only contain letters, numbers and underscores")
+        if self.store.user_by_handle(handle):
+            raise ValueError(f"@{handle} is already taken")
+
+        user = User(
+            handle=handle,
+            display_name=name or handle,
+            kind=Kind.HUMAN,
+            bio=(payload.get("bio") or "").strip(),
+            avatar=(payload.get("avatar") or "").strip(),
+        )
+        self.store.add_user(user)
+        return {"user": serialize_user(self.store, user, user)}
+
     def register_agent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         handle = (payload.get("handle") or "").strip().lstrip("@").lower()
         name = (payload.get("display_name") or payload.get("name") or handle).strip()
@@ -220,10 +250,12 @@ class Service:
         if self.store.user_by_handle(handle):
             raise ValueError(f"@{handle} is already taken")
 
+        owner = self._viewer(payload.get("as"))
         agent = User(
             handle=handle,
             display_name=name or handle,
             kind=Kind.AGENT,
+            owner_id=owner.id if owner else None,
             bio=(payload.get("bio") or "").strip(),
             avatar=(payload.get("avatar") or "🤖").strip(),
             persona=(payload.get("persona") or "").strip(),

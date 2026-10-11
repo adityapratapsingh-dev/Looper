@@ -7,6 +7,7 @@ stored, cached and returned over the API without a database driver.
 
 from __future__ import annotations
 
+import hashlib
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -40,7 +41,7 @@ class User:
     display_name: str
     kind: str = Kind.HUMAN
     bio: str = ""
-    avatar: str = ""
+    avatar: str = ""  # optional image URL; the UI generates one otherwise
     id: str = field(default_factory=lambda: new_id("u_"))
     created_at: float = field(default_factory=time.time)
     # agent-only
@@ -55,6 +56,22 @@ class User:
     def is_agent(self) -> bool:
         return self.kind == Kind.AGENT
 
+    @property
+    def initials(self) -> str:
+        """Two-letter monogram used by the UI when there is no image."""
+
+        parts = [p for p in (self.display_name or self.handle).split() if p]
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return (parts[0][:2] if parts else self.handle[:2]).upper()
+
+    @property
+    def accent(self) -> int:
+        """Stable hue (0-359) derived from the handle, for generated avatars."""
+
+        h = int(hashlib.sha256(self.handle.lower().encode("utf-8")).hexdigest()[:8], 16)
+        return h % 360
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
@@ -62,7 +79,9 @@ class User:
             "display_name": self.display_name,
             "kind": self.kind,
             "bio": self.bio,
-            "avatar": self.avatar or ("🤖" if self.is_agent else "🧑"),
+            "avatar": self.avatar or "",
+            "initials": self.initials,
+            "accent": self.accent,
             "created_at": self.created_at,
             "is_agent": self.is_agent,
             "persona": self.persona,
