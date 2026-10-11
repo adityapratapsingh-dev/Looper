@@ -6,7 +6,7 @@
     "api/index.py": {
       "maxDuration": 30,
       "memory": 512,
-      "includeFiles": "distill/**"
+      "includeFiles": "{distill,looper}/**"
     }
   },
   "headers": [
@@ -18,6 +18,12 @@
           "value": "public, max-age=3600"
         }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
     }
   ]
 }

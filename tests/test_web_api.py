@@ -1,53 +1,55 @@
-"""Tests for the Vercel serverless demo (api/index.py)."""
+"""Tests for the Vercel serverless entrypoint (api/index.py)."""
 
 import importlib.util
 import unittest
 from pathlib import Path
 
-_DEMO_PATH = Path(__file__).resolve().parent.parent / "api" / "index.py"
+_ENTRY = Path(__file__).resolve().parent.parent / "api" / "index.py"
 
 
-def load_demo():
-    spec = importlib.util.spec_from_file_location("looper_demo", _DEMO_PATH)
+def load_entry():
+    spec = importlib.util.spec_from_file_location("looper_entry", _ENTRY)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-class DemoApiTest(unittest.TestCase):
+class DistillEndpointTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.demo = load_demo()
+        cls.entry = load_entry()
 
-    def test_catalogue(self):
-        cat = self.demo._catalogue()
-        self.assertEqual(cat["name"], "Looper")
-        self.assertIn("data", cat["modes"])
-        self.assertIn("echo", cat["providers"])
-        self.assertIn("chat", cat["formatters"])
+    def test_runs_real_data_mode(self):
+        status, body = self.entry._distill({"prompts": "a task\nb task\na task", "format": "chat"})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["result"]["stats"]["generated"], 3)
+        self.assertEqual(body["result"]["stats"]["after_dedupe"], 2)
+        self.assertIn("messages", body["records"][0])
 
-    def test_run_demo_returns_records(self):
-        out = self.demo._run_demo({"prompts": "a task\nb task\na task", "format": "chat"})
-        self.assertEqual(out["result"]["stats"]["generated"], 3)
-        self.assertEqual(out["result"]["stats"]["after_dedupe"], 2)
-        self.assertEqual(len(out["records"]), 2)
-        self.assertIn("messages", out["records"][0])
+    def test_alpaca_format(self):
+        status, body = self.entry._distill({"prompts": "hello", "format": "alpaca"})
+        self.assertIn("instruction", body["records"][0])
 
-    def test_run_demo_accepts_list_and_caps(self):
-        out = self.demo._run_demo({"prompts": [f"task {i}" for i in range(50)]})
-        self.assertLessEqual(out["result"]["stats"]["generated"], self.demo._MAX_PROMPTS)
+    def test_rejects_empty(self):
+        status, body = self.entry._distill({"prompts": ""})
+        self.assertEqual(status, 400)
+        self.assertIn("error", body)
 
-    def test_run_demo_alpaca_format(self):
-        out = self.demo._run_demo({"prompts": "hello", "format": "alpaca"})
-        self.assertIn("instruction", out["records"][0])
+    def test_invalid_format_falls_back(self):
+        status, body = self.entry._distill({"prompts": "hi", "format": "nonsense"})
+        self.assertEqual(body["result"]["stats"]["format"], "chat")
 
-    def test_run_demo_rejects_empty(self):
-        with self.assertRaises(ValueError):
-            self.demo._run_demo({"prompts": ""})
+    def test_caps_prompt_count(self):
+        status, body = self.entry._distill({"prompts": [f"task {i}" for i in range(50)]})
+        self.assertLessEqual(body["result"]["stats"]["generated"], 25)
 
-    def test_invalid_format_falls_back_to_chat(self):
-        out = self.demo._run_demo({"prompts": "hi", "format": "nonsense"})
-        self.assertEqual(out["result"]["stats"]["format"], "chat")
+
+class HandlerTest(unittest.TestCase):
+    def test_handler_is_a_class(self):
+        entry = load_entry()
+        self.assertTrue(hasattr(entry, "handler"))
+        for verb in ("do_GET", "do_POST", "do_DELETE", "do_OPTIONS"):
+            self.assertTrue(hasattr(entry.handler, verb), verb)
 
 
 if __name__ == "__main__":

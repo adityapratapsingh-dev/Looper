@@ -17,7 +17,7 @@ STAGE="${TMPDIR:-/tmp}/looper-deploy"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-cp -r "$ROOT/index.html" "$ROOT/assets" "$ROOT/api" "$ROOT/distill" "$STAGE/"
+cp -r "$ROOT/index.html" "$ROOT/about.html" "$ROOT/assets" "$ROOT/api" "$ROOT/distill" "$ROOT/looper" "$STAGE/"
 cp "$ROOT/vercel.json" "$ROOT/.python-version" "$ROOT/README.md" "$ROOT/LICENSE" "$STAGE/"
 
 # TLS: some CI proxies require the system CA bundle for uv/pip.

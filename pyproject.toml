@@ -35,7 +35,7 @@ dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
 distill = "distill.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["distill*"]
+include = ["distill*", "looper*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
