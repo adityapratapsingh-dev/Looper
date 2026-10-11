@@ -1,0 +1,4 @@
+# Dependencies installed by Vercel for the Python serverless function (api/demo.py).
+# The framework core is standard-library only; PyYAML is optional and used when a
+# YAML config is loaded.
+pyyaml>=6.0

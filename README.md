@@ -133,6 +133,7 @@ stages:
 
 ## Architecture & docs
 
+- `docs/DEPLOY.md` — hosting the demo on Vercel (static site + Python serverless API).
 - `docs/architecture.md` — layer-by-layer design and rationale.
 - `docs/plugins.md` — custom providers, filters, formatters, tools, entry points.
 

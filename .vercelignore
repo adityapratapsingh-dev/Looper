@@ -1,0 +1,16 @@
+# Keep the deployment lean: ship the site, the API and the framework package only.
+.git
+.github
+ci
+tests
+examples
+docs
+configs
+data
+runs
+*.md
+!README.md
+.gitignore
+.vercelignore
+LICENSE
+pyproject.toml
