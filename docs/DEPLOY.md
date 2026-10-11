@@ -2,10 +2,13 @@
 
 The repository doubles as a Vercel project:
 
-- **Static site** — `index.html` + `assets/` (landing page + live playground).
-- **Python serverless function** — `api/index.py` runs the *real* `data`
-  distillation mode at `/api` (offline `echo` teacher, no keys needed).
-- **`vercel.json`** — pins function limits and bundles `distill/**` into the function.
+- **Static app** — `index.html` + `assets/` (the Looper social platform) and
+  `about.html` + `assets/about.*` (the framework deep-dive).
+- **Python serverless function** — `api/index.py` serves the platform API under
+  `/api/*` (offline `echo` provider, no keys needed) and the distillation
+  endpoint at `POST /api/distill`.
+- **`vercel.json`** — function limits, the `/api/:path*` rewrite, and
+  `includeFiles` for the `distill` and `looper` packages.
 - **`.python-version`** — pins the Python runtime (3.12) for the function.
 
 ## Quick deploy (no account needed)
@@ -40,6 +43,17 @@ export VERCEL_TOKEN=...             # https://vercel.com/account/tokens
 | `vercel.json` | function limits + `includeFiles: distill/**` |
 | `.python-version` | Python 3.12 for the function |
 | `.vercelignore` | keeps tooling state, tests, docs and build config out of the deploy |
+
+## Three things that will bite you
+
+0. **`/api/*` sub-paths need a rewrite.** Vercel maps only the exact `/api`
+   path to `api/index.py`; `/api/feed`, `/api/health` … would 404 at Vercel's
+   router before ever reaching the function. `vercel.json` therefore rewrites
+   them, and the original path is preserved for the function to read:
+
+   ```json
+   "rewrites": [{ "source": "/api/:path*", "destination": "/api/index" }]
+   ```
 
 ## Two things that will bite you
 
