@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A pluggable distillation framework for LLMs and AI agents (data, logits, and trajectory distillation)."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 authors = [{ name = "Distill Contributors" }]
 keywords = ["llm", "distillation", "knowledge-distillation", "agents", "synthetic-data"]
 dependencies = [
