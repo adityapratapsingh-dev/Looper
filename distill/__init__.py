@@ -19,6 +19,17 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
+from .config import RunConfig, load_config
+from .errors import (
+    ConfigError,
+    DistillError,
+    MissingDependencyError,
+    ProviderError,
+    RegistryError,
+    ToolExecutionError,
+)
+from .providers.base import Provider, ProviderCapabilities, get_provider
+from .registry import FILTERS, FORMATTERS, MODES, PROVIDERS
 from .types import (
     ChatMessage,
     Completion,
@@ -42,4 +53,19 @@ __all__ = [
     "ToolSpec",
     "Trajectory",
     "Usage",
+    "RunConfig",
+    "load_config",
+    "Provider",
+    "ProviderCapabilities",
+    "get_provider",
+    "MODES",
+    "PROVIDERS",
+    "FILTERS",
+    "FORMATTERS",
+    "DistillError",
+    "ConfigError",
+    "ProviderError",
+    "RegistryError",
+    "ToolExecutionError",
+    "MissingDependencyError",
 ]

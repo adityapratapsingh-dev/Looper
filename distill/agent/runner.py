@@ -111,10 +111,11 @@ class AgentRunner:
         traj.num_steps = steps
         traj.metadata["usage"] = total_usage
         traj.metadata["finish_reason"] = completion.finish_reason
-        if self.reward_fn:
-            traj.reward = self.reward_fn(traj)
+        # Verify first so that reward functions can use traj.success.
         if self.verify_fn:
             traj.success = self.verify_fn(traj)
+        if self.reward_fn:
+            traj.reward = self.reward_fn(traj)
         return traj
 
     # -- batch -------------------------------------------------------------
