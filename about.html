@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Looper — distillation for LLMs & AI agents</title>
+  <meta name="description" content="A pluggable framework for distilling large models and capable agents into smaller, cheaper students. Data, logits and agent-trajectory distillation in one backbone." />
+  <link rel="stylesheet" href="/assets/about.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%81%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <div class="glow"></div>
+
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top"><span class="brand-mark">⟳</span> Looper</a>
+      <nav class="nav-links">
+        <a href="#how">How it works</a>
+        <a href="#modes">Modes</a>
+        <a href="#playground">Playground</a>
+        <a href="#providers">Providers</a>
+        <a class="btn btn-ghost" href="https://github.com/adityapratapsingh-dev/Looper" target="_blank" rel="noopener">GitHub ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero wrap">
+      <div class="pill" id="version-pill">distillation framework · v0.1.0</div>
+      <h1>Distil big models &amp; agents<br /><span class="grad">into small, cheap students.</span></h1>
+      <p class="lede">
+        One pluggable backbone, three first-class modes:
+        <strong>data</strong> (teacher-generated training data),
+        <strong>agent</strong> (tool-using trajectory distillation) and
+        <strong>logits</strong> (classic soft-target KD).
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#playground">Try the playground</a>
+        <a class="btn btn-ghost" href="https://github.com/adityapratapsingh-dev/Looper" target="_blank" rel="noopener">Read the code</a>
+      </div>
+      <div class="terminal">
+        <div class="term-bar"><span></span><span></span><span></span></div>
+        <pre><code><span class="c-dim">$</span> pip install -e <span class="c-str">'.[all]'</span>
+<span class="c-dim">$</span> distill run configs/data_synthesis.yaml
+<span class="c-dim">$</span> distill run configs/agent_distill.yaml
+<span class="c-dim">$</span> distill eval my_eval.yaml</code></pre>
+      </div>
+    </section>
+
+    <section id="how" class="wrap section">
+      <h2>How it works</h2>
+      <div class="pipeline">
+        <div class="node"><b>Teacher</b><span>API · OpenAI-compatible · local HF</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><b>Mode</b><span>data · agent · logits</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><b>Process</b><span>filter · dedupe · format</span></div>
+        <div class="arrow">→</div>
+        <div class="node"><b>Student</b><span>SFT · KD → evaluate</span></div>
+      </div>
+      <p class="muted center">
+        Providers, filters, formatters, tools and modes are all registered by name —
+        swapping a teacher or an export format is a one-line config change.
+      </p>
+    </section>
+
+    <section id="modes" class="wrap section">
+      <h2>Three distillation modes</h2>
+      <div class="cards">
+        <article class="card">
+          <div class="card-tag">data</div>
+          <h3>Response distillation</h3>
+          <p>A teacher generates synthetic responses; they are filtered, de-duplicated and formatted into fine-tuning data.</p>
+          <ul><li>composable filters</li><li>exact + MinHash dedupe</li><li>chat / alpaca / sharegpt / text</li></ul>
+        </article>
+        <article class="card">
+          <div class="card-tag">agent</div>
+          <h3>Agent distillation</h3>
+          <p>A tool-using teacher agent solves tasks; every trajectory (reasoning, tool calls, results) is captured and scored.</p>
+          <ul><li>tool registry + agent loop</li><li>behaviour cloning / SFT export</li><li>success-rate verification</li></ul>
+        </article>
+        <article class="card">
+          <div class="card-tag">logits</div>
+          <h3>Classic KD</h3>
+          <p>A student matches a white-box teacher's temperature-scaled token distribution, with vocabulary alignment.</p>
+          <ul><li>Hinton loss, α and T</li><li>LoRA / 4-bit support</li><li>automatic vocab mapping</li></ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="playground" class="wrap section">
+      <h2>Live playground</h2>
+      <p class="muted">
+        This runs the <strong>real</strong> <code>data</code> distillation mode on the server
+        (via <code>/api</code>) using the built-in offline <code>echo</code> teacher — no API keys needed.
+      </p>
+      <div class="play">
+        <div class="play-input">
+          <label for="prompts">Prompts <span class="hint">(one per line)</span></label>
+          <textarea id="prompts" rows="6">Explain knowledge distillation in two sentences.
+What is LoRA?
+Explain knowledge distillation in two sentences.</textarea>
+          <div class="row">
+            <label>Format
+              <select id="format">
+                <option value="chat">chat</option>
+                <option value="alpaca">alpaca</option>
+                <option value="sharegpt">sharegpt</option>
+                <option value="text">text</option>
+              </select>
+            </label>
+            <label>Temp <output id="temp-out">0.8</output>
+              <input id="temperature" type="range" min="0" max="1.5" step="0.1" value="0.8" />
+            </label>
+            <button class="btn btn-primary" id="run">Distil →</button>
+          </div>
+          <p class="muted small">Duplicated prompts are collapsed by dedupe — try it.</p>
+        </div>
+        <div class="play-output">
+          <div class="stats" id="stats"><span class="muted">Run the pipeline to see stats…</span></div>
+          <div class="tabs">
+            <button class="tab active" data-tab="pretty">Records</button>
+            <button class="tab" data-tab="json">JSON</button>
+          </div>
+          <pre class="out" id="out">// output appears here</pre>
+        </div>
+      </div>
+      <p class="muted small" id="api-note"></p>
+    </section>
+
+    <section id="providers" class="wrap section">
+      <h2>Pluggable providers</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Provider</th><th>Backend</th><th>Tools</th><th>Logprobs</th><th>White-box</th></tr></thead>
+          <tbody>
+            <tr><td>echo</td><td>none — deterministic, offline</td><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td></tr>
+            <tr><td>openai</td><td>OpenAI + any compatible server</td><td class="y">yes</td><td class="y">yes</td><td class="n">—</td></tr>
+            <tr><td>anthropic</td><td>Claude Messages API</td><td class="y">yes</td><td class="n">—</td><td class="n">—</td></tr>
+            <tr><td>hf</td><td>local transformers model</td><td class="y">yes</td><td class="y">yes</td><td class="y">yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <span>Looper · MIT licensed · built for distilling LLMs &amp; agents</span>
+    <a href="https://github.com/adityapratapsingh-dev/Looper" target="_blank" rel="noopener">GitHub ↗</a>
+  </footer>
+
+  <script src="/assets/about.js"></script>
+</body>
+</html>
+
