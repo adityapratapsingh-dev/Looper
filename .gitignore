@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Artifacts produced by distillation runs
+runs/
+outputs/
+data/raw/
+data/processed/
+*.parquet
+*.jsonl.tmp
+checkpoints/
+
+# Env
+.env
+.env.*
