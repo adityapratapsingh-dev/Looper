@@ -1,0 +1,72 @@
+# Automatically merge Dependabot pull requests once CI passes.
+#
+# Why this is triggered by `workflow_run` and not by `pull_request`:
+#
+#   * A workflow triggered by a Dependabot PR (`pull_request`) receives a
+#     READ-ONLY GITHUB_TOKEN and no secrets, so it cannot merge anything.
+#   * `workflow_run` runs in the context of the default branch with the full
+#     `GITHUB_TOKEN` (see the `permissions` block below), which is what lets us
+#     merge.
+#
+# The "tests are passing" gate is the CI workflow itself: this job only runs
+# when the CI run for the PR's head commit concluded successfully. To make the
+# gate meaningful in the repository's branch protection rules, add "CI / test"
+# and "CI / lint" as required status checks on `main`.
+#
+# Safety properties:
+#   * only fires for runs of the `CI` workflow that concluded `success`;
+#   * the Dependabot check is done against the PR's author *via the API*
+#     (never `github.actor`, which is unreliable and spoofable in a
+#     `workflow_run` context) — see the query in the run step;
+#   * never checks out or executes the PR's code;
+#   * merges the exact commit CI validated (`--match-head-commit`), so a PR
+#     cannot change after tests pass.
+name: Dependabot auto-merge
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Merge the Dependabot PR if its tests passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          # The author check is authoritative: it reads the PR from the API
+          # rather than trusting the (spoofable) actor in the event context.
+          number=$(gh pr list --repo "$REPO" --state open --limit 100 \
+            --json number,headRefOid,baseRefName,author \
+            --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") \
+                      | select(.author.login == \"dependabot[bot]\") \
+                      | select(.baseRefName == \"$DEFAULT_BRANCH\") \
+                      | .number" | head -n1)
+
+          if [ -z "$number" ]; then
+            echo "No open Dependabot PR against $DEFAULT_BRANCH at $HEAD_SHA; nothing to merge."
+            exit 0
+          fi
+
+          echo "CI passed for $HEAD_SHA — merging Dependabot PR #$number"
+          gh pr merge "$number" --repo "$REPO" \
+            --squash --delete-branch --match-head-commit "$HEAD_SHA" \
+            || gh pr view "$number" --repo "$REPO" --json state --jq '.state' | grep -qx MERGED

@@ -1,10 +1,10 @@
-"""Vercel serverless entrypoint for the Looper platform.
+"""Vercel serverless entrypoint for Looper.
 
 Routes (all JSON):
 
-* ``/api/*``            — the social platform API (see ``looper.api``)
-* ``POST /api/distill`` — runs the real ``distill`` framework's ``data`` mode
-  (the engine that powers agents), returning the training records it produces.
+* ``/api/*``  — the social platform API (see ``looper.api``): feeds, threads,
+  likes, reposts, quotes, bookmarks, follows, notifications, DMs, trends,
+  search, profiles and agents.
 
 The handler is a thin adapter: all logic lives in the ``looper`` package so it
 can be unit-tested without HTTP.
@@ -25,51 +25,6 @@ if _ROOT not in sys.path:
 from looper.api import handle as platform_handle  # noqa: E402
 
 _MAX_BODY = 64 * 1024
-
-
-def _distill(payload: dict) -> tuple:
-    """Run the distillation engine (offline echo teacher) and return records."""
-
-    import tempfile
-
-    from distill.agent.trajectory import read_jsonl
-    from distill.modes import get_mode
-    from distill.registry import FORMATTERS
-
-    prompts = payload.get("prompts") or []
-    if isinstance(prompts, str):
-        prompts = [line.strip() for line in prompts.splitlines() if line.strip()]
-    prompts = [str(p)[:2000] for p in prompts][:25]
-    if not prompts:
-        return 400, {"error": "provide at least one prompt"}
-
-    fmt = payload.get("format") or "chat"
-    if fmt not in FORMATTERS.names():
-        fmt = "chat"
-
-    with tempfile.TemporaryDirectory() as tmp:
-        out = os.path.join(tmp, "data.jsonl")
-        cfg = {
-            "mode": "data",
-            "teacher": {"provider": "echo", "model": "echo-1"},
-            "prompts": prompts,
-            "sampling": {
-                "temperature": float(payload.get("temperature", 0.8)),
-                "max_tokens": 128,
-            },
-            "filters": [
-                {"name": "non_empty"},
-                {"name": "length", "min_chars": 8, "max_chars": 4000},
-                {"name": "banned_substrings", "substrings": ["as an ai language model"]},
-            ],
-            "dedupe": {"exact": True, "near": {"enabled": True, "threshold": 0.9}},
-            "format": fmt,
-            "output": out,
-        }
-        result = get_mode("data")(cfg).run()
-        records = read_jsonl(out)
-
-    return 200, {"result": result.to_dict(), "records": records}
 
 
 class handler(BaseHTTPRequestHandler):
@@ -126,10 +81,6 @@ class handler(BaseHTTPRequestHandler):
             path = parsed.path
             query = {k: v[0] for k, v in parse_qs(parsed.query).items()}
             body = self._read_body() if method in ("POST", "PUT", "PATCH") else {}
-
-            if path.rstrip("/") == "/api/distill" and method == "POST":
-                status, payload = _distill(body)
-                return self._send(status, payload)
 
             status, payload = platform_handle(method, path, query, body)
             self._send(status, payload)

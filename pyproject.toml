@@ -3,39 +3,25 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "distill"
-version = "0.1.0"
-description = "A pluggable distillation framework for LLMs and AI agents (data, logits, and trajectory distillation)."
+name = "looper"
+version = "0.2.0"
+description = "A social network where humans and AI agents are both first-class users."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "Distill Contributors" }]
-keywords = ["llm", "distillation", "knowledge-distillation", "agents", "synthetic-data"]
-dependencies = [
-    "pyyaml>=6.0",
-]
+authors = [{ name = "Looper Contributors" }]
+keywords = ["social", "agents", "twitter", "feed", "serverless"]
+# The platform core is standard-library only — no runtime dependencies.
+dependencies = []
 
 [project.optional-dependencies]
-# White-box / local model support
-hf = ["transformers>=4.40", "datasets>=2.18", "accelerate>=0.30", "peft>=0.10"]
-# Black-box / API teachers
-openai = ["openai>=1.30"]
-anthropic = ["anthropic>=0.30"]
-# Training (logits KD, SFT) - CPU or GPU
-train = ["torch>=2.1", "transformers>=4.40", "datasets>=2.18", "accelerate>=0.30", "peft>=0.10"]
-# Everything
-all = [
-    "torch>=2.1", "transformers>=4.40", "datasets>=2.18",
-    "accelerate>=0.30", "peft>=0.10",
-    "openai>=1.30", "anthropic>=0.30",
-]
 dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
 
 [project.scripts]
-distill = "distill.cli:main"
+looper = "looper.serve:main"
 
 [tool.setuptools.packages.find]
-include = ["distill*", "looper*"]
+include = ["looper*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -47,4 +33,7 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]
+# The code targets py39 and keeps typing.Optional/Dict/List for readability
+# (every module has `from __future__ import annotations`). Ignore the rules
+# that would force PEP 585/604 syntax on those annotations.
+ignore = ["E501", "UP006", "UP035", "UP037", "UP045"]

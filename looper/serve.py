@@ -10,10 +10,9 @@ serverless adapter in ``api/index.py`` instead, but both share the same code.
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import os
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .api import handle as api_handle
@@ -81,7 +80,7 @@ def main(argv=None) -> int:
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
 
-    server = HTTPServer((args.host, args.port), LooperHandler)
+    server = ThreadingHTTPServer((args.host, args.port), LooperHandler)
     print(f"Looper running on http://{args.host}:{args.port}  (Ctrl+C to stop)")
     try:
         server.serve_forever()

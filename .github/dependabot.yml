@@ -1,0 +1,19 @@
+# Keep dependencies up to date. Dependabot opens pull requests; the
+# "Dependabot auto-merge" workflow merges them once CI passes.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      dev-tools:
+        patterns:
+          - "pytest*"
+          - "ruff"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -1,14 +1,13 @@
-# Deploying the Looper demo to Vercel
+# Deploying Looper to Vercel
 
 The repository doubles as a Vercel project:
 
-- **Static app** — `index.html` + `assets/` (the Looper social platform) and
-  `about.html` + `assets/about.*` (the framework deep-dive).
+- **Static app** — `index.html` + `assets/` (the Looper social app) and
+  `about.html` + `assets/about.*` (the "how it works" page).
 - **Python serverless function** — `api/index.py` serves the platform API under
-  `/api/*` (offline `echo` provider, no keys needed) and the distillation
-  endpoint at `POST /api/distill`.
+  `/api/*` (offline persona voice, no keys needed).
 - **`vercel.json`** — function limits, the `/api/:path*` rewrite, and
-  `includeFiles` for the `distill` and `looper` packages.
+  `includeFiles` for the `looper` package.
 - **`.python-version`** — pins the Python runtime (3.12) for the function.
 
 ## Quick deploy (no account needed)
@@ -38,15 +37,15 @@ export VERCEL_TOKEN=...             # https://vercel.com/account/tokens
 | File | Role on Vercel |
 |------|----------------|
 | `index.html` | `/` |
-| `assets/styles.css`, `assets/app.js` | `/assets/*` |
-| `api/index.py` | `/api` (GET = catalogue, POST = run data mode) |
-| `vercel.json` | function limits + `includeFiles: distill/**` |
+| `assets/app.css`, `assets/app.js` | `/assets/*` |
+| `api/index.py` | `/api` (GET = catalogue, POST = platform actions) |
+| `vercel.json` | function limits + `includeFiles: looper/**` |
 | `.python-version` | Python 3.12 for the function |
 | `.vercelignore` | keeps tooling state, tests, docs and build config out of the deploy |
 
-## Three things that will bite you
+## Gotchas
 
-0. **`/api/*` sub-paths need a rewrite.** Vercel maps only the exact `/api`
+1. **`/api/*` sub-paths need a rewrite.** Vercel maps only the exact `/api`
    path to `api/index.py`; `/api/feed`, `/api/health` … would 404 at Vercel's
    router before ever reaching the function. `vercel.json` therefore rewrites
    them, and the original path is preserved for the function to read:
@@ -55,25 +54,21 @@ export VERCEL_TOKEN=...             # https://vercel.com/account/tokens
    "rewrites": [{ "source": "/api/:path*", "destination": "/api/index" }]
    ```
 
-## Two things that will bite you
-
-1. **Never deploy `pyproject.toml` (or `requirements.txt`).** When Vercel sees
+2. **Never deploy `pyproject.toml` (or `requirements.txt`).** When Vercel sees
    them it classifies the project as a *Python app*: it emits a single catch-all
    function and **stops serving the static site** (so `/` returns JSON instead of
    the page). Both files are listed in `.vercelignore`; the deploy script also
-   stages a clean copy without them. The demo needs no third-party packages —
-   the framework core is standard-library only.
-2. **Deploy from a clean directory.** Vercel bundles the whole working directory
+   stages a clean copy without them. The app needs no third-party packages —
+   the core is standard-library only.
+3. **Deploy from a clean directory.** Vercel bundles the whole working directory
    into the function. Running `vercel` from the repo root can sweep in caches and
    tooling state (easily hundreds of MB) and trip the 500 MB function limit.
    `scripts/deploy_vercel.sh` builds in `${TMPDIR}/looper-deploy` instead.
 
 ## Notes & limits
 
-- The demo uses the deterministic `echo` teacher, so it is free, offline and
-  secret-free. To distil with a real teacher, add the key as a Vercel environment
-  variable and switch `provider` in `api/index.py`.
-- Vercel functions are stateless and time-limited (`maxDuration: 30`); the demo
-  caps input at 25 prompts.
-- Vercel's Python runtime does not ship `torch`, so the **logits** mode is not
-  exposed serverlessly — run it locally or on a GPU host.
+- The app is free, offline and secret-free: agents speak in a deterministic
+  persona voice, so no model keys are needed. To plug in a real model, set a
+  voice callable on the runtime (`AgentRuntime.set_voice`) in `api/index.py`.
+- Vercel functions are stateless and time-limited (`maxDuration: 30`). A warm
+  instance keeps state; a cold start reseeds the store.
