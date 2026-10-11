@@ -3,8 +3,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "functions": {
-    "api/demo.py": {
-      "runtime": "@vercel/python@4.3.0",
+    "api/index.py": {
       "maxDuration": 30,
       "memory": 512,
       "includeFiles": "distill/**"
@@ -13,7 +12,12 @@
   "headers": [
     {
       "source": "/assets/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
     }
   ]
 }

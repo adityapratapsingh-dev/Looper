@@ -1,9 +1,9 @@
 """Vercel serverless function — a live demo of the Looper distillation framework.
 
-Routes (Vercel maps ``api/demo.py`` to ``/api/demo``):
+Routes (Vercel maps ``api/index.py`` to ``/api``):
 
-* ``GET  /api/demo``  -> framework metadata (modes, providers, filters, formatters)
-* ``POST /api/demo``  -> runs the real ``data`` distillation mode offline using the
+* ``GET  /api``  -> framework metadata (modes, providers, filters, formatters)
+* ``POST /api``  -> runs the real ``data`` distillation mode offline using the
   built-in ``echo`` teacher (no API keys required) and returns the generated
   training records.
 

@@ -1,10 +1,10 @@
-"""Tests for the Vercel serverless demo (api/demo.py)."""
+"""Tests for the Vercel serverless demo (api/index.py)."""
 
 import importlib.util
 import unittest
 from pathlib import Path
 
-_DEMO_PATH = Path(__file__).resolve().parent.parent / "api" / "demo.py"
+_DEMO_PATH = Path(__file__).resolve().parent.parent / "api" / "index.py"
 
 
 def load_demo():

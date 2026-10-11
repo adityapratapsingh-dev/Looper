@@ -27,3 +27,7 @@ checkpoints/
 # Env
 .env
 .env.*
+.vercel
+.vercel/
+uv.lock
+.python-version.bak

@@ -1,4 +1,4 @@
-// Looper playground — calls the real Python `data` mode via /api/demo.
+// Looper playground — calls the real Python `data` mode via /api.
 // Falls back to a small client-side simulation when the API is unavailable
 // (e.g. the page is opened as a static file).
 
@@ -73,7 +73,7 @@ function prettyRecords(records) {
 
 async function loadCatalogue() {
   try {
-    const res = await fetch("/api/demo");
+    const res = await fetch("/api");
     if (!res.ok) throw new Error("bad status");
     const data = await res.json();
     els.version.textContent = `distillation framework · v${data.version} · ${data.modes.length} modes`;
@@ -93,7 +93,7 @@ async function run() {
     temperature: Number(els.temperature.value),
   };
   try {
-    const res = await fetch("/api/demo", {
+    const res = await fetch("/api", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

@@ -1,6 +1,26 @@
 # Keep the deployment lean: ship the site, the API and the framework package only.
+
+# Sandbox / tooling state (never deploy these)
+.cline-home
+.vercel
 .git
 .github
+.gitignore
+.vercelignore
+__pycache__
+*.pyc
+*.egg-info
+build
+dist
+uv.lock
+
+# IMPORTANT: pyproject.toml + requirements.txt must NOT be deployed.
+# Their presence makes Vercel treat the whole project as a Python app, which
+# disables static-file serving (everything would route to the function).
+pyproject.toml
+requirements.txt
+
+# Repo extras not needed at runtime
 ci
 tests
 examples
@@ -8,9 +28,6 @@ docs
 configs
 data
 runs
+scripts
 *.md
-!README.md
-.gitignore
-.vercelignore
 LICENSE
-pyproject.toml
