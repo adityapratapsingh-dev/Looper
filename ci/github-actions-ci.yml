@@ -1,3 +1,8 @@
+# CI template.
+# This file is kept outside .github/workflows/ because the automated
+# committer here lacks the `workflows` permission. To enable it, copy it to
+# .github/workflows/ci.yml in a repo where you can push workflow files.
+
 name: CI
 
 on:
