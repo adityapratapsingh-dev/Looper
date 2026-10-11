@@ -58,8 +58,13 @@ def load_config(path: str | Path) -> Dict[str, Any]:
             from . import _yaml
 
             data = _yaml.loads(text) or {}
+        except Exception as exc:  # noqa: BLE001 - malformed YAML
+            raise ConfigError(f"invalid YAML in {p}: {exc}") from exc
     else:
-        data = json.loads(text or "{}")
+        try:
+            data = json.loads(text or "{}")
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"invalid JSON in {p}: {exc}") from exc
     if not isinstance(data, dict):
         raise ConfigError(f"config root must be a mapping, got {type(data).__name__}")
     return interpolate_env(data)

@@ -120,3 +120,20 @@ class CliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConfigErrorTest(unittest.TestCase):
+    def test_malformed_json_raises_config_error(self):
+        from distill.errors import ConfigError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "bad.json"
+            p.write_text("{ not json")
+            with self.assertRaises(ConfigError):
+                load_config(p)
+
+    def test_missing_config_raises_config_error(self):
+        from distill.errors import ConfigError
+
+        with self.assertRaises(ConfigError):
+            load_config("/definitely/not/here.yaml")
