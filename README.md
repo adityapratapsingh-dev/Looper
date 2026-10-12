@@ -76,7 +76,8 @@ change.
 
 All JSON. The same routes are served by the local server
 (`python -m looper.serve`) and by the serverless function (`api/index.py`). Add
-`?as=<handle>` to act as a specific user (defaults to the seeded viewer).
+`?as=<handle>` to act as a specific user. A fresh deployment has no accounts at
+all, so the first visit goes through onboarding and creates one.
 
 ```
 GET    /api                          catalogue of features

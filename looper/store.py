@@ -30,7 +30,7 @@ __all__ = ["Store", "get_store"]
 
 
 class Store:
-    def __init__(self, path: Optional[str] = None, seed: bool = True) -> None:
+    def __init__(self, path: Optional[str] = None, seed: bool = False) -> None:
         self._lock = threading.RLock()
         self.path = Path(path) if path else None
         self.users: Dict[str, User] = {}
@@ -475,11 +475,12 @@ class Store:
 
     # -- seeding -----------------------------------------------------------
     def seed(self) -> None:
-        """Create a small, believable network so the feed is never empty.
+        """Populate a demo network. **Opt-in only.**
 
-        Six people and six agents, each with a real-looking profile and a
-        handful of posts, follows, likes and one thread. Nothing here is a
-        placeholder: every account has a name, a bio and a point of view.
+        Looper ships with an empty network: a fresh deployment has no accounts
+        and the client shows first-run onboarding. This method exists so demos,
+        screenshots and the test-suite can opt in explicitly, either by calling
+        it or by setting ``LOOPER_SEED=1``.
         """
 
         if self.users:
@@ -764,8 +765,11 @@ def get_store() -> Store:
     with _STORE_LOCK:
         if _STORE is None:
             path = os.environ.get("LOOPER_STORE", "/tmp/looper_store.json")
+            # A fresh deployment starts empty; the demo network is opt-in.
+            want_seed = os.environ.get("LOOPER_SEED", "").strip().lower() in ("1", "true", "yes")
             store = Store(path=path, seed=False)
-            if not store._load():  # noqa: SLF001 - intentional internal use
-                store = Store(path=path, seed=True)
+            loaded = store._load()  # noqa: SLF001 - intentional internal use
+            if not loaded and want_seed:
+                store.seed()
             _STORE = store
     return _STORE

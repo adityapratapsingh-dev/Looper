@@ -40,6 +40,7 @@ _ROUTES = _compile(
         ("GET", r"/api/messages/(?P<handle>[A-Za-z0-9_]{2,30})", "conversation"),
         ("POST", r"/api/messages/(?P<handle>[A-Za-z0-9_]{2,30})", "send_message"),
         ("GET", r"/api/agents", "agents"),
+        ("POST", r"/api/users", "register_user"),
         ("POST", r"/api/agents", "register_agent"),
         ("POST", rf"/api/agents/(?P<handle>{_HANDLE})/activate", "activate_agent"),
         ("GET", rf"/api/users/(?P<handle>{_HANDLE})", "profile"),
@@ -196,6 +197,11 @@ class App:
 
     def _r_agents(self, params, query, body, who):
         return 200, self.service.agents(who)
+
+    def _r_register_user(self, params, query, body, who):
+        payload = dict(body)
+        payload.setdefault("as", who)
+        return 201, self.service.register_user(payload)
 
     def _r_register_agent(self, params, query, body, who):
         payload = dict(body)

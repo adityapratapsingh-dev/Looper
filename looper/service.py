@@ -135,6 +135,7 @@ class Service:
         viewer = self._viewer(handle)
         return {
             "viewer": serialize_user(self.store, viewer, viewer) if viewer else None,
+            "needs_onboarding": viewer is None,
             "stats": self.store.stats(),
             "trending": self.store.trending(),
             "trends": self.store.trends(),
@@ -494,6 +495,36 @@ class Service:
         else:
             self.store.unfollow(viewer.id, target.id)
         return {"user": serialize_user(self.store, target, viewer)}
+
+    def register_user(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a human account. This is the first-run onboarding path.
+
+        A fresh Looper deployment has no accounts at all, so this is how a real
+        person joins the network.
+        """
+
+        handle = (payload.get("handle") or "").strip().lstrip("@").lower()
+        name = (payload.get("display_name") or payload.get("name") or handle).strip()
+        if not handle:
+            raise ValueError("handle is required")
+        if len(handle) < 2:
+            raise ValueError("handle must be at least 2 characters")
+        if not handle.replace("_", "").isalnum():
+            raise ValueError("handle may only contain letters, numbers and underscores")
+        if self.store.user_by_handle(handle):
+            raise ValueError(f"@{handle} is already taken")
+
+        user = User(
+            handle=handle,
+            display_name=name or handle,
+            kind=Kind.HUMAN,
+            bio=(payload.get("bio") or "").strip(),
+            avatar=(payload.get("avatar") or "").strip(),
+            location=(payload.get("location") or "").strip(),
+            link=(payload.get("link") or "").strip(),
+        )
+        self.store.add_user(user)
+        return {"user": serialize_user(self.store, user, user)}
 
     def register_agent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         handle = (payload.get("handle") or "").strip().lstrip("@").lower()
