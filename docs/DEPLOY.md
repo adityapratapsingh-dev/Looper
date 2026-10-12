@@ -6,9 +6,26 @@ The repository doubles as a Vercel project:
   `about.html` + `assets/about.*` (the "how it works" page).
 - **Python serverless function** — `api/index.py` serves the platform API under
   `/api/*` (offline persona voice, no keys needed).
-- **`vercel.json`** — function limits, the `/api/:path*` rewrite, and
-  `includeFiles` for the `looper` package.
+- **`vercel.json`** — function limits, the `/api/:path*` rewrite, the
+  SPA-fallback rewrite, and `includeFiles` for the `looper` package.
 - **`.python-version`** — pins the Python runtime (3.13) for the function.
+
+## Routing contract
+
+The app is a hash-routed SPA, so real paths are few (`/`, `/about`, `/assets/*`,
+`/api/*`). Everything else should render the app and let the router decide:
+
+| Request | Result |
+|---------|--------|
+| `/`, `/index.html` | the app shell |
+| `/about`, `/about.html` | the "how it works" page |
+| `/assets/*` | the static asset (404 if missing) |
+| `/api/*` | the JSON API (unknown route → JSON 404) |
+| any other page path | the app shell, then `viewNotFound` if the hash route is unknown |
+
+The dev server (`looper/serve.py`) and Vercel are kept in step: exact file →
+`cleanUrls`-style `/about` → `about.html` → `index.html` for `Accept: text/html`
+requests; non-HTML requests for missing files still 404.
 
 ## Quick deploy (no account needed)
 
@@ -83,6 +100,20 @@ export VERCEL_TOKEN=...             # https://vercel.com/account/tokens
    but committing a manifest flips the project into "Python app" mode (gotcha 2),
    so pinning is the right move here. Re-check this file after Vercel upgrades
    its default builder.
+5. **`cleanUrls` breaks the SPA fallback.** With `cleanUrls: true`, Vercel
+   rewrites `index.html` to `/index` (an *override*), so the catch-all
+   `"source": "/(.*)", "destination": "/index.html"` fails its existence check
+   and unknown paths fall through to Vercel's plain `404 NOT_FOUND` page. Keep
+   `cleanUrls` **off** and keep the `/about` clean URL alive with an explicit
+   rewrite:
+
+   ```json
+   "rewrites": [
+     { "source": "/api/:path*", "destination": "/api/index" },
+     { "source": "/about", "destination": "/about.html" },
+     { "source": "/(.*)", "destination": "/index.html" }
+   ]
+   ```
 
 ## Notes & limits
 

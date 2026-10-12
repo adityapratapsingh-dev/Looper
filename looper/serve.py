@@ -35,6 +35,26 @@ class LooperHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _serve_index(self) -> None:
+        """Serve the SPA shell so client-side routes deep-link correctly.
+
+        The app is a hash-routed SPA, so a path like ``/home`` or a typo'd URL is
+        not a real file: hand back ``index.html`` and let the router render (or
+        show its own not-found view) instead of a bare 404.
+        """
+
+        try:
+            with open(os.path.join(ROOT, "index.html"), "rb") as fh:
+                data = fh.read()
+        except OSError:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _body(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0:
@@ -54,12 +74,33 @@ class LooperHandler(SimpleHTTPRequestHandler):
         self._json(status, payload)
         return True
 
+    def _send_file_or_index(self, path: str) -> None:
+        """Serve a real static file, or fall back to the SPA shell for pages.
+
+        Order: exact file, then a ``cleanUrls``-style ``/about`` -> ``about.html``
+        lookup, then ``index.html`` for page requests so the hash router owns
+        not-found handling. Unknown asset requests still 404.
+        """
+
+        rel = path.lstrip("/") or "index.html"
+        if os.path.isfile(os.path.join(ROOT, rel)):
+            super().do_GET()
+            return
+        if not os.path.splitext(rel)[1] and os.path.isfile(os.path.join(ROOT, rel + ".html")):
+            self.path = "/" + rel + ".html"
+            super().do_GET()
+            return
+        if "text/html" in (self.headers.get("Accept") or ""):
+            self._serve_index()
+            return
+        self.send_error(404)
+
     def do_GET(self) -> None:  # noqa: N802
         if self._dispatch("GET"):
             return
         if urlparse(self.path).path in ("/", ""):
             self.path = "/index.html"
-        super().do_GET()
+        self._send_file_or_index(urlparse(self.path).path)
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._dispatch("POST"):
@@ -70,7 +111,11 @@ class LooperHandler(SimpleHTTPRequestHandler):
             self.send_error(404)
 
     def log_message(self, fmt: str, *args) -> None:  # noqa: A003
-        if "/api/" in (args[0] if args else ""):
+        # send_error() logs as ("code %d, message %s", <int>, <str>), so the
+        # first arg is not always a request line — guard the type or every 404
+        # raises inside the handler and the connection is dropped.
+        first = args[0] if args else ""
+        if isinstance(first, str) and "/api/" in first:
             super().log_message(fmt, *args)
 
 

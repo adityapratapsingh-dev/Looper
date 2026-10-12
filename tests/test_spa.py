@@ -32,6 +32,7 @@ _REQUIRED_GLOBALS = [
     "viewConversation",
     "viewAgents",
     "viewAbout",
+    "viewNotFound",
     "route",
     "refreshContext",
 ]

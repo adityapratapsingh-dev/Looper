@@ -40,6 +40,12 @@ node --check assets/app.js                         # JS syntax
   interpreter it will build with (currently 3.13); a mismatch makes `uv` abort
   with `incompatible with the project's Python requirement`. See
   `docs/DEPLOY.md` gotcha 4.
+- Unknown paths are not errors. Both the dev server and Vercel fall back to
+  `index.html` for page requests, and the hash router renders `viewNotFound`
+  for an unknown `#/...` route. `cleanUrls` is **off** because its `/index.html`
+  -> `/index` override made the SPA-fallback rewrite fail its existence check
+  (unknown paths fell through to Vercel's plain 404); `/about` is kept working
+  by an explicit rewrite instead.
 
 ## CI and Dependabot auto-merge
 

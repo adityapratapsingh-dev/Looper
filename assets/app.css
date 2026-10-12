@@ -460,6 +460,8 @@ html[data-theme="light"] .avatar:not(.agent) { background: hsl(var(--av-h, 210) 
 .empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 64px 24px; text-align: center; color: var(--muted); }
 .empty .icon { color: var(--muted); opacity: 0.6; }
 .empty p { margin: 0; max-width: 320px; }
+.empty h2 { margin: 0; font-size: 1.15rem; color: var(--text); }
+.empty-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
 .skeleton { height: 84px; border-bottom: 1px solid var(--border); background: linear-gradient(90deg, transparent, var(--hover), transparent); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .toast {
