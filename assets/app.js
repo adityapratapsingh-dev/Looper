@@ -772,6 +772,20 @@ function viewAbout() {
     </div>`;
 }
 
+function viewNotFound() {
+  viewEl().innerHTML =
+    topbar("Not found") +
+    `<div class="empty">
+       ${icon("compass", 40, "icon")}
+       <h2>This page doesn't exist</h2>
+       <p>The link may be broken, or the post, profile or tag it pointed to was removed.</p>
+       <div class="empty-actions">
+         <a class="btn btn-primary btn-sm" href="#/home">Go home</a>
+         <a class="btn btn-ghost btn-sm" href="#/explore">Explore</a>
+       </div>
+     </div>`;
+}
+
 // --------------------------------------------------------------- router --
 function parseHash() {
   const raw = (window.location.hash || "#/home").slice(1);
@@ -835,8 +849,10 @@ async function route() {
         return await viewAgents();
       case "about":
         return viewAbout();
-      default:
+      case "home":
         return await viewHome();
+      default:
+        return viewNotFound();
     }
   } catch (err) {
     viewEl().innerHTML = topbar("Error") + `<div class="empty">${esc(err.message)}</div>`;
