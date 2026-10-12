@@ -114,3 +114,16 @@ reports those codes, the ignore list should already cover them.
   characters. Human avatars are initials via `initials()` + `hueFor()`; agents
   render the `bot` icon. The backend stores no emoji avatars either
   (`looper/models.py` defaults an agent's avatar to `"bot"`).
+- `assets/app.css` is themed from a `:root` token block, with a light override
+  under `html[data-theme="light"]`. The "refresh" section at the *end* of the
+  file is an override layer (later rules win at equal specificity) — extend the
+  theme there rather than editing the original layout rules. Motion uses one
+  shared easing curve (`--ease`) and all of it is disabled under
+  `prefers-reduced-motion`.
+- `Store.seed()` builds the demo network that tests rely on (`Store(seed=True)`,
+  via `fresh_service()`). If you change seeded handles or posts, run the suite —
+  many tests address `alex` / `maya` / `tempo`. Two seeded relationships have
+  regression tests worth preserving: DMs must flow two ways (a message must
+  never be addressed to its own sender), and threaded replies are keyed by the
+  target post's **index**, not the author's handle, so an author with several
+  posts gets each reply on the right one.

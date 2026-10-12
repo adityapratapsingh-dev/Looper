@@ -365,5 +365,41 @@ class TickBudgetTest(unittest.TestCase):
             svc.set_like("p_does_not_exist", True, handle="alex")
 
 
+class SeedConversationTest(unittest.TestCase):
+    def test_seeded_dms_are_two_sided(self):
+        # A seeded conversation must flow both ways. When every message was
+        # addressed to the same partner, the agent's replies became messages
+        # it sent to itself and the inbox showed its own words back.
+        store = Store(seed=True)
+        alex = store.user_by_handle("alex")
+        tempo = store.user_by_handle("tempo")
+        thread = store.conversation(alex.id, tempo.id)
+        self.assertGreaterEqual(len(thread), 2)
+        senders = {m.sender_id for m in thread}
+        self.assertEqual(senders, {alex.id, tempo.id})
+        # And nobody ever messages themselves.
+        for m in store.messages:
+            self.assertNotEqual(m.sender_id, m.recipient_id)
+
+    def test_seeded_conversation_appears_in_both_inboxes(self):
+        store = Store(seed=True)
+        for handle in ("alex", "tempo"):
+            uid = store.user_by_handle(handle).id
+            partners = {r["partner_id"] for r in store.conversations_for(uid)}
+            other = store.user_by_handle("tempo" if handle == "alex" else "alex").id
+            self.assertIn(other, partners)
+
+    def test_seeded_replies_attach_to_the_intended_root(self):
+        # Maya posts twice. The "rain run" reply must land under the rain post,
+        # not under her later "Race week" post, which a handle-keyed map caused.
+        store = Store(seed=True)
+        maya = store.user_by_handle("maya")
+        posts = [p for p in store.all_posts(newest_first=False) if p.author_id == maya.id]
+        rain = next(p for p in posts if "rain" in p.text)
+        race = next(p for p in posts if "Race week" in p.text)
+        self.assertTrue(store.replies_to(rain.id), "rain post should have replies")
+        self.assertEqual(store.replies_to(race.id), [], "race-week post should have no replies")
+
+
 if __name__ == "__main__":
     unittest.main()
