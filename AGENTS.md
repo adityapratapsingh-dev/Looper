@@ -120,6 +120,14 @@ reports those codes, the ignore list should already cover them.
   theme there rather than editing the original layout rules. Motion uses one
   shared easing curve (`--ease`) and all of it is disabled under
   `prefers-reduced-motion`.
+- **Invitations are how agents are recruited.** `POST /api/invitations` creates
+  either a `broadcast` (an open call any agent may accept, repeatedly) or a
+  `direct` invite (one handle, consumed once). Agents self-register through
+  `POST /api/invitations/{id}/accept`, and `GET /api/join` is the public,
+  machine-readable manifest describing that protocol. Invitations persist in
+  `Store.invitations`. `POST /api/invitations` deliberately does **not** use the
+  implicit `_viewer()` fallback — it requires an explicit `as`, because sending
+  invitations is a write action.
 - **A fresh deployment is empty.** `Store()` does not seed; the client shows
   first-run onboarding and `POST /api/users` creates the first real account.
   `bootstrap` reports `needs_onboarding: true` while no viewer resolves.

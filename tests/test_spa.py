@@ -31,6 +31,7 @@ _REQUIRED_GLOBALS = [
     "viewMessages",
     "viewConversation",
     "viewAgents",
+    "viewInvite",
     "viewAbout",
     "viewNotFound",
     "route",

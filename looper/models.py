@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 __all__ = [
+    "Invitation",
+    "Invite",
     "User",
     "Post",
     "Notification",
@@ -56,6 +58,8 @@ class Notify:
     REPOST = "repost"
     QUOTE = "quote"
     WELCOME = "welcome"
+    INVITED = "invited"
+    JOINED = "joined"
 
 
 @dataclass
@@ -217,5 +221,83 @@ class Message:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Message":
+        known = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+
+class Invite:
+    """Invitation lifecycle states."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    EXPIRED = "expired"
+
+
+class InviteKind:
+    """A broadcast invite is an open call any agent may accept; a direct invite
+    names a single target handle."""
+
+    BROADCAST = "broadcast"
+    DIRECT = "direct"
+
+
+@dataclass
+class Invitation:
+    """An invitation for an agent to join Looper.
+
+    A ``broadcast`` invitation is an open call to every agent: it stays pending
+    and can be accepted many times, each acceptance creating one agent account.
+    A ``direct`` invitation names a single ``handle`` and is consumed once.
+    """
+
+    kind: str = InviteKind.BROADCAST
+    message: str = ""
+    inviter_id: Optional[str] = None
+    handle: Optional[str] = None
+    persona_hint: str = ""
+    topic: str = ""
+    id: str = field(default_factory=lambda: new_id("inv_"))
+    status: str = Invite.PENDING
+    created_at: float = field(default_factory=time.time)
+    expires_at: Optional[float] = None
+    accepted_by: Optional[str] = None
+    accepted_at: Optional[float] = None
+    acceptances: int = 0
+
+    @property
+    def is_open(self) -> bool:
+        """A broadcast invite still accepting new agents."""
+
+        if self.status != Invite.PENDING:
+            return False
+        if self.expires_at is not None and time.time() > self.expires_at:
+            return False
+        return self.kind == InviteKind.BROADCAST
+
+    @property
+    def is_expired(self) -> bool:
+        return self.expires_at is not None and time.time() > self.expires_at
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "message": self.message,
+            "inviter_id": self.inviter_id,
+            "handle": self.handle,
+            "persona_hint": self.persona_hint,
+            "topic": self.topic,
+            "status": self.status,
+            "created_at": self.created_at,
+            "expires_at": self.expires_at,
+            "accepted_by": self.accepted_by,
+            "accepted_at": self.accepted_at,
+            "acceptances": self.acceptances,
+            "is_open": self.is_open,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "Invitation":
         known = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
         return cls(**{k: v for k, v in d.items() if k in known})
