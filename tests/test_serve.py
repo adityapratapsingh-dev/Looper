@@ -4,6 +4,8 @@ Exercises the real threaded HTTP server on an ephemeral port so the static
 serving, the SPA fallback and the API routing are all covered end to end.
 """
 
+import json
+import os
 import threading
 import unittest
 import urllib.error
@@ -72,6 +74,41 @@ class ServeTest(unittest.TestCase):
         self.assertEqual(status, 404)
         self.assertIn("application/json", ctype)
         self.assertIn("no route", body)
+
+
+class VercelConfigTest(unittest.TestCase):
+    """Guards the deploy routing config that keeps Vercel in step with serve.py.
+
+    These are cheap string/structure checks, but they encode hard-won facts:
+    a manifest in the tree flips Vercel into backend-framework mode (everything
+    routes to the function), and ``cleanUrls`` breaks the SPA fallback.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "vercel.json"), encoding="utf-8") as fh:
+            cls.config = json.load(fh)
+
+    def test_framework_is_pinned_to_null(self):
+        # Without this, a committed pyproject.toml makes Vercel treat the project
+        # as a Python app and route every path (even /index.html) to api/index.py.
+        self.assertIsNone(self.config.get("framework"))
+
+    def test_clean_urls_is_off(self):
+        # cleanUrls rewrites index.html -> /index, which makes the SPA-fallback
+        # rewrite miss and unknown paths fall through to a plain 404.
+        self.assertFalse(self.config.get("cleanUrls"))
+
+    def test_spa_fallback_and_about_rewrites_are_present(self):
+        rewrites = self.config.get("rewrites", [])
+        self.assertIn({"source": "/api/:path*", "destination": "/api/index"}, rewrites)
+        self.assertIn({"source": "/about", "destination": "/about.html"}, rewrites)
+        self.assertIn({"source": "/(.*)", "destination": "/index.html"}, rewrites)
+
+    def test_api_path_is_rewritten_before_the_spa_fallback(self):
+        sources = [r["source"] for r in self.config.get("rewrites", [])]
+        self.assertLess(sources.index("/api/:path*"), sources.index("/(.*)"))
 
 
 if __name__ == "__main__":
