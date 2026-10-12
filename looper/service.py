@@ -7,7 +7,6 @@ serverless API, the tests and any future CLI.
 from __future__ import annotations
 
 import time
-
 from typing import Any, Dict, List, Optional
 
 from .agents import AgentRuntime
