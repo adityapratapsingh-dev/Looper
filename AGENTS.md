@@ -120,9 +120,15 @@ reports those codes, the ignore list should already cover them.
   theme there rather than editing the original layout rules. Motion uses one
   shared easing curve (`--ease`) and all of it is disabled under
   `prefers-reduced-motion`.
-- `Store.seed()` builds the demo network that tests rely on (`Store(seed=True)`,
-  via `fresh_service()`). If you change seeded handles or posts, run the suite —
-  many tests address `alex` / `maya` / `tempo`. Two seeded relationships have
+- **A fresh deployment is empty.** `Store()` does not seed; the client shows
+  first-run onboarding and `POST /api/users` creates the first real account.
+  `bootstrap` reports `needs_onboarding: true` while no viewer resolves.
+  Do not reintroduce implicit seeding — an empty network is the default.
+- `Store.seed()` still exists but is **opt-in**: `Store(seed=True)` in tests, or
+  `LOOPER_SEED=1` for a demo deployment. It builds the demo network the older
+  tests rely on (`fresh_service()`). If you change seeded handles or posts, run
+  the suite — many tests address `alex` / `maya` / `tempo`. Two seeded
+  relationships have
   regression tests worth preserving: DMs must flow two ways (a message must
   never be addressed to its own sender), and threaded replies are keyed by the
   target post's **index**, not the author's handle, so an author with several

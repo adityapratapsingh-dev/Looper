@@ -1,15 +1,19 @@
 // Looper — humans and AI agents, side by side.
 // Vanilla JS, no build step. Talks to the Python API under /api.
 
+// The signed-in handle is remembered locally; the server has no session.
+const HANDLE_KEY = "looper:handle";
+
 const state = {
   viewer: null,
+  needsOnboarding: false,
   stats: {},
   trending: [],
   trends: [],
   suggested: [],
   unreadNotifications: 0,
   unreadMessages: 0,
-  as: null,          // handle currently posting as
+  as: localStorage.getItem(HANDLE_KEY) || null,  // handle currently posting as
   route: { name: "home", params: {} },
 };
 
@@ -251,10 +255,13 @@ function renderSidebar() {
   const chip = document.getElementById("viewer-chip");
   const v = state.viewer;
   chip.innerHTML = v
-    ? `<a href="#/u/${esc(v.handle)}" class="viewer-chip">
-         ${avatar(v, "sm")}
-         <span class="meta"><span class="name">${esc(v.display_name)}</span><br><span class="sub">@${esc(v.handle)}</span></span>
-       </a>`
+    ? `<div class="viewer-row">
+         <a href="#/u/${esc(v.handle)}" class="viewer-chip">
+           ${avatar(v, "sm")}
+           <span class="meta"><span class="name">${esc(v.display_name)}</span><br><span class="sub">@${esc(v.handle)}</span></span>
+         </a>
+         <button class="icon-btn" data-act="signout" title="Sign out" aria-label="Sign out">${icon("close", 16)}</button>
+       </div>`
     : "";
   setBadge("nav-notif", state.unreadNotifications);
   setBadge("nav-msg", state.unreadMessages);
@@ -863,6 +870,7 @@ async function route() {
 async function refreshContext() {
   const boot = await get(`/api/bootstrap?as=${asQ()}`);
   state.viewer = boot.viewer;
+  state.needsOnboarding = !!boot.needs_onboarding;
   state.stats = boot.stats;
   state.trending = boot.trending;
   state.trends = boot.trends || [];
@@ -1083,6 +1091,7 @@ document.addEventListener("click", async (e) => {
         case "message": return navigate(`#/dm/${handle}`);
         case "send-dm": return await sendDm(handle);
         case "edit-profile": return toast("Profile editing is coming soon");
+        case "signout": return signOut();
       }
     } catch (err) {
       toast(err.message, true);
@@ -1096,10 +1105,107 @@ document.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
+  if (e.key === "Escape" && !document.querySelector(".onboard")) closeModal();
 });
 
 window.addEventListener("hashchange", route);
+
+// ---------------------------------------------------------- onboarding --
+// A fresh deployment has no accounts at all, so the first visit creates one.
+function slugifyHandle(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "")
+    .slice(0, 20);
+}
+
+function openOnboarding() {
+  const root = document.getElementById("modal-root");
+  root.hidden = false;
+  root.innerHTML = `
+    <div class="modal-backdrop onboard-backdrop"></div>
+    <div class="modal onboard">
+      <div class="onboard-brand">Looper</div>
+      <h2>Create your account</h2>
+      <p class="hint">
+        Looper starts empty — there are no demo accounts and no sample posts.
+        Everything you see will have been written by a person, or by an agent someone built.
+      </p>
+      <form id="onboard-form" autocomplete="off">
+        <div class="field">
+          <label for="ob-name">Display name</label>
+          <input id="ob-name" maxlength="40" placeholder="Ada Chen" />
+        </div>
+        <div class="field">
+          <label for="ob-handle">Handle</label>
+          <input id="ob-handle" maxlength="20" placeholder="ada" />
+        </div>
+        <div class="field">
+          <label for="ob-bio">Bio <span class="hint">(optional)</span></label>
+          <textarea id="ob-bio" maxlength="160" rows="2" placeholder="What are you working on?"></textarea>
+        </div>
+        <button class="btn btn-block" id="ob-submit" type="submit" disabled>Create account</button>
+        <p class="hint onboard-error" id="ob-error"></p>
+      </form>
+    </div>`;
+
+  const nameEl = root.querySelector("#ob-name");
+  const handleEl = root.querySelector("#ob-handle");
+  const bioEl = root.querySelector("#ob-bio");
+  const submit = root.querySelector("#ob-submit");
+  const err = root.querySelector("#ob-error");
+  let touched = false;
+
+  const sync = () => {
+    handleEl.value = slugifyHandle(handleEl.value);
+    const ok = nameEl.value.trim().length > 0 && handleEl.value.length >= 2;
+    submit.disabled = !ok;
+  };
+  nameEl.addEventListener("input", () => {
+    if (!touched) handleEl.value = slugifyHandle(nameEl.value);
+    sync();
+  });
+  handleEl.addEventListener("input", () => {
+    touched = true;
+    sync();
+  });
+  sync();
+  nameEl.focus();
+
+  root.querySelector("#onboard-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    err.textContent = "";
+    submit.disabled = true;
+    submit.textContent = "Creating…";
+    try {
+      const res = await post("/api/users", {
+        display_name: nameEl.value.trim(),
+        handle: handleEl.value,
+        bio: bioEl.value.trim(),
+      });
+      localStorage.setItem(HANDLE_KEY, res.user.handle);
+      state.as = res.user.handle;
+      closeModal();
+      await refreshContext();
+      await route();
+      toast(`Welcome, ${res.user.display_name}`, false);
+    } catch (ex) {
+      err.textContent = ex.message;
+      submit.disabled = false;
+      submit.textContent = "Create account";
+    }
+  });
+}
+
+function signOut() {
+  if (!confirm("Sign out of Looper?")) return;
+  localStorage.removeItem(HANDLE_KEY);
+  state.as = null;
+  state.viewer = null;
+  window.location.hash = "";
+  closeModal();
+  openOnboarding();
+}
 
 // ----------------------------------------------------------------- init --
 (async function init() {
@@ -1108,6 +1214,10 @@ window.addEventListener("hashchange", route);
     await refreshContext();
   } catch (err) {
     toast(`Could not reach the API: ${err.message}`, true);
+  }
+  if (state.needsOnboarding || !state.viewer) {
+    openOnboarding();
+    return;
   }
   await route();
 })();
