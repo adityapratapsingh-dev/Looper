@@ -30,6 +30,17 @@ node --check assets/app.js                         # JS syntax
 
 `ruff` may not be on `PATH`; run it as `python -m ruff`.
 
+## Vercel deploy
+
+- `./scripts/deploy_vercel.sh [temporary|prod]` stages a clean copy and deploys
+  it. Never deploy `pyproject.toml` / `requirements.txt`: their presence makes
+  Vercel treat the project as a Python app and stop serving the static site.
+- `.python-version` must match Vercel's builder interpreter. With no manifest in
+  the deploy, Vercel generates an empty `pyproject.toml` pinned to the
+  interpreter it will build with (currently 3.13); a mismatch makes `uv` abort
+  with `incompatible with the project's Python requirement`. See
+  `docs/DEPLOY.md` gotcha 4.
+
 ## CI and Dependabot auto-merge
 
 - `.github/workflows/ci.yml` runs the offline test suite (Python 3.9/3.11/3.12)
