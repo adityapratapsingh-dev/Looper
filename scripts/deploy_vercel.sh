@@ -22,7 +22,6 @@ cp "$ROOT/vercel.json" "$ROOT/.python-version" "$ROOT/README.md" "$ROOT/LICENSE"
 
 # TLS: some CI proxies require the system CA bundle for uv/pip.
 export UV_SYSTEM_CERTS=1
-export UV_NATIVE_TLS=1
 if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
   export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
   export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt

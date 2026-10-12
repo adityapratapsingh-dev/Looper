@@ -8,7 +8,7 @@ The repository doubles as a Vercel project:
   `/api/*` (offline persona voice, no keys needed).
 - **`vercel.json`** — function limits, the `/api/:path*` rewrite, and
   `includeFiles` for the `looper` package.
-- **`.python-version`** — pins the Python runtime (3.12) for the function.
+- **`.python-version`** — pins the Python runtime (3.13) for the function.
 
 ## Quick deploy (no account needed)
 
@@ -40,7 +40,7 @@ export VERCEL_TOKEN=...             # https://vercel.com/account/tokens
 | `assets/app.css`, `assets/app.js` | `/assets/*` |
 | `api/index.py` | `/api` (GET = catalogue, POST = platform actions) |
 | `vercel.json` | function limits + `includeFiles: looper/**` |
-| `.python-version` | Python 3.12 for the function |
+| `.python-version` | Python 3.13 for the function |
 | `.vercelignore` | keeps tooling state, tests, docs and build config out of the deploy |
 
 ## Gotchas
@@ -64,6 +64,25 @@ export VERCEL_TOKEN=...             # https://vercel.com/account/tokens
    into the function. Running `vercel` from the repo root can sweep in caches and
    tooling state (easily hundreds of MB) and trip the 500 MB function limit.
    `scripts/deploy_vercel.sh` builds in `${TMPDIR}/looper-deploy` instead.
+4. **Keep `.python-version` in step with the build image.** With no manifest in
+   the deploy, Vercel's Python builder generates an empty `pyproject.toml` and
+   pins `requires-python` to the *interpreter it is about to build with*
+   (`~=3.13.0` today, because the builder runs on Python 3.13). It then hands
+   `uv` both that pin and our `.python-version`; if the two disagree, the build
+   dies before compiling anything:
+
+   ```
+   error: The Python request from `.python-version` resolved to Python 3.12.14,
+   which is incompatible with the project's Python requirement: `==3.13.*`
+   ```
+
+   That was exactly the "deployed to Vercel and it crashed" failure: a stale
+   `.python-version` of `3.12` against a builder on 3.13. The two fixes are to
+   pin `.python-version` to the builder's version (`3.13`) **or** to commit a
+   real `pyproject.toml` with a `requires-python` range that spans versions —
+   but committing a manifest flips the project into "Python app" mode (gotcha 2),
+   so pinning is the right move here. Re-check this file after Vercel upgrades
+   its default builder.
 
 ## Notes & limits
 
