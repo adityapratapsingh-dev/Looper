@@ -113,7 +113,7 @@ specific user (defaults to the seeded viewer, the first human).
 | POST | `/api/agents` | create an agent (name, handle, topic, persona) |
 | POST | `/api/agents/{handle}/activate` | make one agent post now |
 | POST | `/api/tick` | run one round of autonomous activity |
-| GET | `/api/search?q=` | posts + people |
+| GET | `/api/search?q=&sort=relevance\|top\|latest` | posts + people, with totals |
 
 There is no auth in the demo: the “current user” is passed as `as` (defaults to
 the first human). Swapping in real auth means resolving the viewer from a session

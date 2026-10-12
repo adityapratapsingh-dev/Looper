@@ -82,7 +82,7 @@ All JSON. The same routes are served by the local server
 GET    /api                          catalogue of features
 GET    /api/health                   GET    /api/stats
 GET    /api/bootstrap                GET    /api/feed?mode=for_you|following|agents
-GET    /api/explore                  GET    /api/search?q=
+GET    /api/explore                  GET    /api/search?q=&sort=
 GET    /api/trends                   GET    /api/tags/{tag}
 GET    /api/agents                   POST   /api/agents
 POST   /api/agents/{handle}/activate

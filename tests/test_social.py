@@ -4,7 +4,7 @@ direct messages, trends/hashtags, follower lists and pagination."""
 import unittest
 
 from looper.api import make_app
-from looper.models import Kind
+from looper.models import Kind, Post
 from looper.service import Service
 from looper.store import Store
 
@@ -272,6 +272,97 @@ class NewApiRoutesTest(unittest.TestCase):
         status, body = self.app.handle("GET", "/api/users/alex/following")
         self.assertEqual(status, 200)
         self.assertIn("users", body)
+
+
+class FeedPaginationTest(unittest.TestCase):
+    """The store returns the full ranked feed; the service slices it once.
+
+    Regression: ``Store.feed`` used to accept limit/offset *and* the service
+    sliced the result again, so ``offset`` was applied to an already-windowed
+    list and the second page returned the wrong posts.
+    """
+
+    def test_store_feed_is_not_pre_sliced(self):
+        store = Store(seed=True)
+        author = human(store).id
+        for i in range(12):
+            store.add_post(Post(author_id=author, text=f"extra {i}"))
+        # No limit argument: the full ranked list comes back.
+        self.assertGreaterEqual(len(store.feed()), 12)
+
+    def test_service_feed_pages_are_disjoint_and_complete(self):
+        svc = fresh_service()
+        for i in range(12):
+            svc.create_post(f"paged {i}", handle="alex")
+        first = svc.feed(limit=5, offset=0)
+        second = svc.feed(limit=5, offset=5)
+        third = svc.feed(limit=5, offset=10)
+        ids = [p["id"] for p in first["posts"] + second["posts"] + third["posts"]]
+        self.assertEqual(len(ids), len(set(ids)), "pages overlapped")
+        # The first page must match the head of the unpaginated feed.
+        whole = svc.feed(limit=0)
+        self.assertEqual(
+            [p["id"] for p in first["posts"]],
+            [p["id"] for p in whole["posts"][:5]],
+        )
+
+    def test_explore_respects_limit(self):
+        svc = fresh_service()
+        data = svc.explore(limit=3)
+        self.assertLessEqual(len(data["posts"]), 3)
+
+
+class SearchTest(unittest.TestCase):
+    def test_search_reports_totals_and_sorts(self):
+        svc = fresh_service()
+        for i in range(4):
+            svc.create_post(f"cycling note {i}", handle="alex")
+        hot = svc.create_post("cycling: the definitive take", handle="maya")["post"]
+        for h in ("alex", "theo", "nadia", "luis", "hana"):
+            svc.set_like(hot["id"], True, handle=h)
+        latest = svc.search("cycling", sort="latest")
+        top = svc.search("cycling", sort="top")
+        self.assertEqual(latest["total_posts"], top["total_posts"])
+        self.assertGreaterEqual(latest["total_posts"], 5)
+        # "top" orders by engagement descending; "latest" by recency.
+        scores = [svc.store.engagement(p["id"]) for p in top["posts"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        times = [p["created_at"] for p in latest["posts"]]
+        self.assertEqual(times, sorted(times, reverse=True))
+
+    def test_search_route_passes_sort(self):
+        app = make_app(fresh_service())
+        app.handle("POST", "/api/posts", body={"text": "football shape", "as": "nadia"})
+        status, body = app.handle("GET", "/api/search", {"q": "football", "sort": "top"})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["sort"], "top")
+
+
+class TickBudgetTest(unittest.TestCase):
+    def test_zero_budget_is_a_noop(self):
+        svc = fresh_service()
+        before = len(svc.store.posts)
+        result = svc.tick(max_actions=0)
+        self.assertEqual(result["count"], 0)
+        self.assertEqual(len(svc.store.posts), before)
+
+    def test_negative_and_huge_budgets_are_clamped(self):
+        svc = fresh_service()
+        self.assertEqual(svc.tick(max_actions=-5)["count"], 0)
+        self.assertLessEqual(svc.tick(max_actions=10_000)["count"], 10)
+
+    def test_tick_with_no_agents_terminates(self):
+        # A store with humans only must not loop forever trying to find agents.
+        store = Store(seed=False)
+        store.add_user(human(Store(seed=True), 0))
+        svc = Service(store)
+        result = svc.tick(max_actions=3)
+        self.assertEqual(result["count"], 0)
+
+    def test_set_like_rejects_unknown_post(self):
+        svc = fresh_service()
+        with self.assertRaises(ValueError):
+            svc.set_like("p_does_not_exist", True, handle="alex")
 
 
 if __name__ == "__main__":

@@ -72,9 +72,13 @@ reports those codes, the ignore list should already cover them.
 - `looper/store.py` is the single swappable data layer. `service.py` calls only
   its methods, so a database-backed store means reimplementing that one class.
 - Pagination lives in `Service._page(items, offset, limit)`. It slices the list
-  itself. The `store.feed` / `store.tag_feed` methods accept `limit`/`offset`
-  too, but service callers must pass the *full* list to `_page` (do not pre-slice
-  in the store) or pagination double-applies and returns the wrong window.
+  itself. `store.feed` / `store.tag_feed` return the *full* ranked/matching list
+  (no `limit`/`offset`) — paginate only in the service, never in the store, or
+  the window double-applies and returns the wrong posts.
+- `Service.search` accepts `sort` (`relevance` | `top` | `latest`) and returns
+  `total_users` / `total_posts` alongside the results.
+- `Service.tick` clamps `max_actions` to `0..10` and lets each agent post at
+  most once per tick, so one call can never flood the feed.
 - Feed ranking: `Store._rank` uses `(1 + engagement) / (1+age)^0.6`, with an
   autonomous boost and a self boost, so brand-new posts stay visible.
 - `linkify` in `assets/app.js` tokenises the *raw* text, then escapes each token.

@@ -207,7 +207,9 @@ class Service:
             "next_offset": page["next_offset"],
         }
 
-    def search(self, query: str, handle: Optional[str] = None) -> Dict[str, Any]:
+    def search(
+        self, query: str, handle: Optional[str] = None, sort: str = "relevance"
+    ) -> Dict[str, Any]:
         viewer = self._viewer(handle)
         q = (query or "").strip()
         users = [
@@ -216,12 +218,18 @@ class Service:
             if q.lstrip("@").lower() in u.handle.lower()
             or q.lower() in u.display_name.lower()
         ]
+        posts = self.store.search(q)
+        if sort == "top":
+            posts.sort(key=lambda p: self.store.engagement(p.id), reverse=True)
+        elif sort == "latest":
+            posts.sort(key=lambda p: p.created_at, reverse=True)
         return {
             "query": q,
+            "sort": sort,
+            "total_users": len(users),
+            "total_posts": len(posts),
             "users": users,
-            "posts": [
-                serialize_post(self.store, p, viewer) for p in self.store.search(q)
-            ],
+            "posts": [serialize_post(self.store, p, viewer) for p in posts],
         }
 
     def agents(self, handle: Optional[str] = None) -> Dict[str, Any]:
@@ -240,13 +248,14 @@ class Service:
         """The Explore page's landing data: trends, people and top posts."""
 
         viewer = self._viewer(handle)
-        top = self.store.feed(viewer.id if viewer else None, mode="for_you", limit=limit)
+        top = self.store.feed(viewer.id if viewer else None, mode="for_you")
+        page = self._page(top, 0, limit)
         people = [u for u in self.store.list_users() if not viewer or u.id != viewer.id]
         people.sort(key=lambda u: len(self.store.followers(u.id)), reverse=True)
         return {
             "trends": self.store.trends(12),
             "people": [serialize_user(self.store, u, viewer) for u in people[:6]],
-            "posts": [serialize_post(self.store, p, viewer) for p in top],
+            "posts": [serialize_post(self.store, p, viewer) for p in page["items"]],
         }
 
     def tag_feed(
@@ -432,15 +441,16 @@ class Service:
         if viewer is None:
             raise ValueError("unknown viewer")
         post = self.store.get_post(post_id)
+        if post is None:
+            raise ValueError("post not found")
         if liked:
             self.store.like(post_id, viewer.id)
-            if post is not None:
-                self.store.notify(
-                    post.author_id, Notify.LIKE, actor_id=viewer.id, post_id=post_id
-                )
+            self.store.notify(
+                post.author_id, Notify.LIKE, actor_id=viewer.id, post_id=post_id
+            )
         else:
             self.store.unlike(post_id, viewer.id)
-        return {"post": serialize_post(self.store, post, viewer) if post else None}
+        return {"post": serialize_post(self.store, post, viewer)}
 
     def set_repost(self, post_id: str, reposted: bool, handle: Optional[str] = None) -> Dict[str, Any]:
         viewer = self._viewer(handle)
@@ -567,9 +577,11 @@ class Service:
         """Run one round of autonomous agent activity.
 
         Agents first answer recent human posts that mention them and are still
-        unanswered, then — if budget remains — post something of their own.
+        unanswered, then — if budget remains — post something of their own. The
+        budget is clamped so a single tick can never flood the feed.
         """
 
+        max_actions = max(0, min(int(max_actions or 0), 10))
         viewer = self._viewer(handle)
         actions: List[Dict[str, Any]] = []
         agent_ids = {u.id for u in self.store.list_users(Kind.AGENT)}
@@ -603,11 +615,11 @@ class Service:
                 )
                 break
 
+        # Let each agent post at most once per tick, in a stable round-robin.
         agents = self.store.list_users(Kind.AGENT)
-        i = 0
-        while len(actions) < max_actions and agents and i <= len(agents):
-            agent = agents[i % len(agents)]
-            i += 1
+        for agent in agents:
+            if len(actions) >= max_actions:
+                break
             text = self.runtime.compose_post(agent)
             post = self.store.add_post(
                 Post(author_id=agent.id, text=text, autonomous=True)
