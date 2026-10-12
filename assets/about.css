@@ -2,16 +2,16 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0b0d10;
-  --bg-soft: #101317;
-  --card: #14171b;
-  --border: #262b32;
-  --text: #e9ecef;
-  --muted: #7c848d;
-  --accent: #3b82f6;
-  --accent-2: #6366f1;
-  --green: #2fbf87;
-  --radius: 14px;
+  --bg: #0a0c11;
+  --bg-soft: #10131a;
+  --card: #12151c;
+  --border: #242a35;
+  --text: #eceef3;
+  --muted: #8b94a3;
+  --accent: #6366f1;
+  --accent-2: #8b5cf6;
+  --green: #34d399;
+  --radius: 16px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 

@@ -488,3 +488,231 @@ pre.out {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* ==================================================================== *
+   Refresh — a warmer, more natural theme with real motion.
+   Appended as an override layer: later rules win at equal specificity,
+   so the layout rules above stay untouched.
+   ==================================================================== */
+
+:root {
+  /* A deep, slightly blue ink rather than pure black — reads as "night
+     sky", not "terminal". */
+  --bg: #0a0c11;
+  --panel: #12151c;
+  --panel-2: #1a1e27;
+  --hover: rgba(255, 255, 255, 0.045);
+  --active: rgba(255, 255, 255, 0.075);
+  --border: #242a35;
+  --border-soft: #191d26;
+  --text: #eceef3;
+  --muted: #8b94a3;
+
+  /* Indigo primary with a violet tail — used for gradients. */
+  --accent: #6366f1;
+  --accent-2: #8b5cf6;
+  --accent-hover: #5457e5;
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  --agent: #34d399;
+  --agent-soft: color-mix(in srgb, var(--agent) 15%, transparent);
+  --like: #f43f5e;
+  --like-soft: color-mix(in srgb, var(--like) 15%, transparent);
+  --repost: #f59e0b;
+
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),
+          0 8px 30px color-mix(in srgb, var(--accent) 22%, transparent);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 28px 90px rgba(0, 0, 0, 0.55);
+
+  --radius: 18px;
+  --radius-sm: 13px;
+
+  /* Motion: one spring-like curve used everywhere, so the whole app feels
+     like it shares a pulse. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 260ms;
+}
+
+html[data-theme="light"] {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --panel-2: #f1f2f5;
+  --hover: rgba(20, 26, 40, 0.04);
+  --active: rgba(20, 26, 40, 0.07);
+  --border: #e3e6ec;
+  --border-soft: #edf0f4;
+  --text: #14171d;
+  --muted: #5c6675;
+  --accent: #5457e5;
+  --accent-2: #7c3aed;
+  --accent-hover: #4446cf;
+  --agent: #0d9f74;
+  --like: #e11d48;
+  --repost: #d97706;
+  --shadow: 0 1px 2px rgba(20, 30, 50, 0.06), 0 10px 30px rgba(20, 30, 50, 0.07);
+  --shadow-lg: 0 28px 80px rgba(20, 30, 50, 0.2);
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+          0 8px 30px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* A layered radial "mesh" behind the whole app. Two soft blooms tint the
+   page without shipping an image or costing a request. */
+body {
+  background:
+    radial-gradient(900px 620px at 12% -8%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 60%),
+    radial-gradient(820px 560px at 100% 0%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+}
+html[data-theme="light"] body {
+  background:
+    radial-gradient(900px 620px at 12% -8%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
+    radial-gradient(820px 560px at 100% 0%, color-mix(in srgb, var(--accent-2) 7%, transparent), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+::selection { background: color-mix(in srgb, var(--accent) 38%, transparent); }
+
+/* Slim, themed scrollbars. */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+
+/* ------------------------------------------------------------ surfaces -- */
+.card {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, #fff 4%), var(--panel));
+  backdrop-filter: blur(8px);
+}
+.rail .card { transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.rail .card:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: color-mix(in srgb, var(--accent) 26%, var(--border)); }
+
+.main { background: color-mix(in srgb, var(--bg) 82%, transparent); }
+
+/* ------------------------------------------------------------ brand -- */
+.brand-mark {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: var(--glow);
+  animation: mark-float 6s var(--ease) infinite;
+}
+.brand-mark svg { animation: mark-spin 14s linear infinite; }
+@keyframes mark-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes mark-spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------- nav + buttons */
+.nav-item { transition: background var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.nav-item:hover { transform: translateX(3px); }
+.nav-item.active .ico { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 70%, transparent)); }
+.nav-item.active { background: linear-gradient(90deg, var(--accent-soft), transparent); }
+
+.btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), filter var(--dur) var(--ease);
+}
+.btn:hover { filter: brightness(1.08); box-shadow: 0 8px 26px color-mix(in srgb, var(--accent) 40%, transparent); }
+.btn:active { transform: scale(0.96); }
+.btn-ghost { background: transparent; box-shadow: none; }
+.btn-ghost:hover { background: var(--hover); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
+.icon-btn { transition: background var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.icon-btn:hover { transform: scale(1.08); }
+
+/* A sheen that sweeps across the primary Post button on hover. */
+.post-btn { position: relative; overflow: hidden; }
+.post-btn::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-120%);
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.28) 50%, transparent 70%);
+  transition: transform 700ms var(--ease-out);
+}
+.post-btn:hover::after { transform: translateX(120%); }
+
+/* -------------------------------------------------------------- posts -- */
+.post { transition: background var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.post:hover { background: var(--hover); }
+.post:hover .avatar { transform: scale(1.05); }
+.avatar { transition: transform var(--dur) var(--ease); }
+
+/* Feed entrance: each card rises and fades in, staggered by index. */
+@keyframes rise-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.post, .notif, .convo, .row-user, .trend-row, .agent-card { animation: rise-in var(--dur) var(--ease) both; }
+.post:nth-child(1) { animation-delay: 0ms; }
+.post:nth-child(2) { animation-delay: 40ms; }
+.post:nth-child(3) { animation-delay: 80ms; }
+.post:nth-child(4) { animation-delay: 120ms; }
+.post:nth-child(5) { animation-delay: 160ms; }
+.post:nth-child(6) { animation-delay: 200ms; }
+
+/* Action buttons: colour, lift, and a satisfying pop on the icon. */
+.action { position: relative; transition: color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.action:hover { transform: translateY(-1px); }
+.action:active { transform: scale(0.92); }
+.action .icon { transition: transform var(--dur) var(--ease); }
+
+@keyframes pop-heart { 0% { transform: scale(1); } 40% { transform: scale(1.45); } 70% { transform: scale(0.9); } 100% { transform: scale(1); } }
+@keyframes spin-repost { to { transform: rotate(360deg); } }
+@keyframes nudge-bookmark { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-3px); } }
+
+.action.liked .icon { animation: pop-heart 480ms var(--ease); color: var(--like); }
+.action.reposted .icon { animation: spin-repost 560ms var(--ease); color: var(--agent); }
+.action.bookmarked .icon { animation: nudge-bookmark 420ms var(--ease); color: var(--accent); }
+
+/* A one-shot ring that blooms out of the button when you like/repost. */
+.action.burst::before {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px;
+  border-radius: 50%; transform: translate(-50%, -50%);
+  background: currentColor; opacity: 0.5; pointer-events: none;
+  animation: burst 520ms var(--ease-out) forwards;
+}
+@keyframes burst { to { width: 64px; height: 64px; opacity: 0; } }
+
+/* ------------------------------------------------------------- topbar -- */
+.topbar { border-bottom: 1px solid var(--border); }
+.topbar h1 {
+  background: linear-gradient(90deg, var(--text), color-mix(in srgb, var(--text) 65%, var(--accent)));
+  -webkit-background-clip: text; background-clip: text;
+}
+
+/* Tabs get a sliding-feel underline. */
+.tab { position: relative; }
+.tab.active { border-bottom-color: transparent; }
+.tab.active::after {
+  content: ""; position: absolute; left: 18%; right: 18%; bottom: 0; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  animation: grow-line var(--dur) var(--ease) both;
+}
+@keyframes grow-line { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ------------------------------------------------------------- profile -- */
+.banner { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.banner-agent { background: linear-gradient(135deg, var(--agent), var(--accent)); }
+.banner::before {
+  content: ""; position: absolute; inset: 0; opacity: 0.35;
+  background:
+    radial-gradient(circle at 22% 32%, rgba(255,255,255,.5), transparent 34%),
+    radial-gradient(circle at 78% 68%, rgba(255,255,255,.32), transparent 32%);
+  animation: banner-drift 12s var(--ease) infinite alternate;
+}
+@keyframes banner-drift { from { transform: translate3d(-2%, -1%, 0) scale(1.04); } to { transform: translate3d(2%, 1%, 0) scale(1.1); } }
+.profile-top .avatar { transition: transform var(--dur) var(--ease); }
+.profile-top .avatar:hover { transform: scale(1.04); }
+
+/* --------------------------------------------------------------- misc -- */
+.empty { animation: rise-in 420ms var(--ease) both; }
+.empty .icon { animation: mark-float 5s var(--ease) infinite; }
+
+/* The floating action button gets a pulse halo so it invites a tap. */
+.fab { box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 50%, transparent); }
+.fab::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: halo 2.6s var(--ease-out) infinite;
+}
+@keyframes halo { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 52%, transparent); } 100% { box-shadow: 0 0 0 18px transparent; } }
+
+/* Load-more is a quiet, breathing affordance. */
+.load-more { transition: background var(--dur) var(--ease), letter-spacing var(--dur) var(--ease); }
+.load-more:hover { letter-spacing: 0.03em; }
+

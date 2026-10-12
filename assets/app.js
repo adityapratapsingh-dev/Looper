@@ -874,6 +874,16 @@ async function refreshContext() {
   renderRail();
 }
 
+// Fire the one-shot ring animation on an action button. Removing the class
+// first re-triggers it when the same button is pressed twice.
+function burst(btn) {
+  if (!btn) return;
+  btn.classList.remove("burst");
+  void btn.offsetWidth;
+  btn.classList.add("burst");
+  setTimeout(() => btn.classList.remove("burst"), 560);
+}
+
 async function actLike(id) {
   const card = document.querySelector(`.post[data-post="${id}"]`);
   const btn = card && card.querySelector('[data-act="like"]');
@@ -882,6 +892,7 @@ async function actLike(id) {
   if (btn && res.post) {
     btn.classList.toggle("liked", res.post.liked);
     btn.innerHTML = `${icon("heart", 17, res.post.liked ? "filled" : "")} <span>${res.post.likes}</span>`;
+    if (res.post.liked) burst(btn);
   }
 }
 
@@ -893,6 +904,7 @@ async function actRepost(id) {
   if (btn && res.post) {
     btn.classList.toggle("reposted", res.post.reposted);
     btn.innerHTML = `${icon("repost", 17)} <span>${res.post.reposts}</span>`;
+    if (res.post.reposted) burst(btn);
   }
   toast(res.post && res.post.reposted ? "Reposted" : "Undid repost");
 }
@@ -905,6 +917,7 @@ async function actBookmark(id) {
   if (btn && res.post) {
     btn.classList.toggle("bookmarked", res.post.bookmarked);
     btn.innerHTML = icon("bookmark", 17, res.post.bookmarked ? "filled" : "");
+    if (res.post.bookmarked) burst(btn);
   }
   toast(res.post && res.post.bookmarked ? "Saved to bookmarks" : "Removed from bookmarks");
 }
