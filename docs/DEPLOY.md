@@ -71,19 +71,30 @@ export VERCEL_TOKEN=...             # https://vercel.com/account/tokens
    "rewrites": [{ "source": "/api/:path*", "destination": "/api/index" }]
    ```
 
-2. **Never deploy `pyproject.toml` (or `requirements.txt`).** When Vercel sees
-   them it classifies the project as a *Python app*: it emits a single catch-all
-   function and **stops serving the static site** (so `/` returns JSON instead of
-   the page). Both files are listed in `.vercelignore`; the deploy script also
-   stages a clean copy without them. The app needs no third-party packages —
-   the core is standard-library only.
+2. **Pin `"framework": null` — a committed manifest makes Vercel a Python app.**
+   The repo tracks `pyproject.toml`/`requirements.txt` for local development and
+   CI. `.vercelignore` does **not** stop Vercel's project detector: the moment it
+   sees a manifest it classifies the project as a *Python app*, auto-selects
+   `api/index.py` as the entrypoint (via `api/*.py`), and routes **every** path
+   to the function — including `/`, `/index.html`, `/about` and `/assets/*`. The
+   site becomes one JSON 404 emitter:
+
+   ```json
+   { "error": "no route for GET /index.html" }
+   ```
+
+   That is the "preview screen" failure. `"framework": null` in `vercel.json`
+   disables the detector and restores static serving while leaving the manifest
+   in place. The staged deploy script ships without the manifests as a belt-and-
+   braces measure, but the Git integration deploys the whole tree, so the config
+   key is the real fix.
 3. **Deploy from a clean directory.** Vercel bundles the whole working directory
    into the function. Running `vercel` from the repo root can sweep in caches and
    tooling state (easily hundreds of MB) and trip the 500 MB function limit.
-   `scripts/deploy_vercel.sh` builds in `${TMPDIR}/looper-deploy` instead.
-4. **Keep `.python-version` in step with the build image.** With no manifest in
-   the deploy, Vercel's Python builder generates an empty `pyproject.toml` and
-   pins `requires-python` to the *interpreter it is about to build with*
+   `scripts/deploy_vercel.sh` builds in `${TMPDIR}/looper-deploy` instead, and
+   excludes the manifests so the staged output is a plain static site.
+4. **Keep `.python-version` in step with the build image.** Vercel's Python
+   builder pins `requires-python` to the *interpreter it is about to build with*
    (`~=3.13.0` today, because the builder runs on Python 3.13). It then hands
    `uv` both that pin and our `.python-version`; if the two disagree, the build
    dies before compiling anything:

@@ -14,9 +14,11 @@ build
 dist
 uv.lock
 
-# IMPORTANT: pyproject.toml + requirements.txt must NOT be deployed.
-# Their presence makes Vercel treat the whole project as a Python app, which
-# disables static-file serving (everything would route to the function).
+# IMPORTANT: pyproject.toml + requirements.txt are excluded so the staged deploy
+# is a plain static site. NOTE: .vercelignore alone does NOT stop Vercel from
+# detecting the repo as a Python app when these files ARE present (the Git
+# integration deploys the whole tree, ignoring this file for detection); the
+# real guard is "framework": null in vercel.json. Keep both.
 pyproject.toml
 requirements.txt
 

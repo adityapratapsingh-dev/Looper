@@ -33,8 +33,12 @@ node --check assets/app.js                         # JS syntax
 ## Vercel deploy
 
 - `./scripts/deploy_vercel.sh [temporary|prod]` stages a clean copy and deploys
-  it. Never deploy `pyproject.toml` / `requirements.txt`: their presence makes
-  Vercel treat the project as a Python app and stop serving the static site.
+  it. The stage omits `pyproject.toml` / `requirements.txt`, but that is only
+  belt-and-braces: `.vercelignore` does **not** stop Vercel's project detector,
+  so the repo tracks a manifest and relies on `"framework": null` in
+  `vercel.json` to stay a static site. Without that key the Git-integration
+  deploy routes every path — even `/index.html` — to `api/index.py` and the whole
+  site becomes `{"error": "no route for GET /index.html"}`.
 - `.python-version` must match Vercel's builder interpreter. With no manifest in
   the deploy, Vercel generates an empty `pyproject.toml` pinned to the
   interpreter it will build with (currently 3.13); a mismatch makes `uv` abort
