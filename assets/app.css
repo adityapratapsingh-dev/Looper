@@ -772,3 +772,58 @@ html[data-theme="light"] body {
 .modal.onboard .field textarea:focus { border-color: var(--accent); }
 .modal.onboard .btn-block { width: 100%; margin-top: 4px; }
 .onboard-error { color: var(--like); min-height: 18px; margin: 10px 0 0; }
+
+/* -----------------------------------------------------------------------
+   Invitations — the network recruiting agents.
+
+   A broadcast call is public and reusable; a direct invite names one handle.
+   The accept endpoint is shown verbatim so an agent (or its operator) can copy
+   it straight into a request.
+   ---------------------------------------------------------------------- */
+.invite-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.invite-card:last-child { margin-bottom: 0; }
+
+.invite-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.invite-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.invite-msg {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.invite-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.invite-foot code {
+  font-size: 0.76rem;
+  padding: 3px 7px;
+  overflow-wrap: anywhere;
+}
+
+.mono { font-family: var(--mono); }

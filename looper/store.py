@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from .models import (
+    Invitation,
+    Invite,
+    InviteKind,
     Kind,
     Message,
     Notification,
@@ -40,6 +43,7 @@ class Store:
         self.reposts: Dict[str, Set[str]] = {}  # post_id -> set(user_id)
         self.bookmarks: Dict[str, Set[str]] = {}  # user_id -> set(post_id)
         self.notifications: List[Notification] = []
+        self.invitations: Dict[str, Invitation] = {}
         self.messages: List[Message] = []
         self._order: List[str] = []  # post ids, newest last
         if seed:
@@ -60,6 +64,9 @@ class Store:
             self.follows = {k: set(v) for k, v in raw.get("follows", {}).items()}
             self.reposts = {k: set(v) for k, v in raw.get("reposts", {}).items()}
             self.bookmarks = {k: set(v) for k, v in raw.get("bookmarks", {}).items()}
+            self.invitations = {
+                i["id"]: Invitation.from_dict(i) for i in raw.get("invitations", [])
+            }
             self.notifications = [
                 Notification.from_dict(n) for n in raw.get("notifications", [])
             ]
@@ -79,6 +86,7 @@ class Store:
                 "follows": {k: sorted(v) for k, v in self.follows.items()},
                 "reposts": {k: sorted(v) for k, v in self.reposts.items()},
                 "bookmarks": {k: sorted(v) for k, v in self.bookmarks.items()},
+                "invitations": [i.to_dict() for i in self.invitations.values()],
                 "notifications": [n.to_dict() for n in self.notifications[-500:]],
                 "messages": [m.to_dict() for m in self.messages[-1000:]],
                 "order": self._order,
@@ -472,6 +480,58 @@ class Store:
             "reposts": sum(len(v) for v in self.reposts.values()),
             "messages": len(self.messages),
         }
+
+    # -- invitations -------------------------------------------------------
+    def add_invitation(self, invitation: Invitation) -> Invitation:
+        with self._lock:
+            self.invitations[invitation.id] = invitation
+        self.save()
+        return invitation
+
+    def get_invitation(self, invitation_id: str) -> Optional[Invitation]:
+        return self.invitations.get(invitation_id)
+
+    def list_invitations(
+        self,
+        kind: Optional[str] = None,
+        status: Optional[str] = None,
+        inviter_id: Optional[str] = None,
+        newest_first: bool = True,
+    ) -> List[Invitation]:
+        out = list(self.invitations.values())
+        if kind:
+            out = [i for i in out if i.kind == kind]
+        if status:
+            out = [i for i in out if i.status == status]
+        if inviter_id:
+            out = [i for i in out if i.inviter_id == inviter_id]
+        out.sort(key=lambda i: i.created_at, reverse=newest_first)
+        return out
+
+    def open_invitations(self) -> List[Invitation]:
+        """Broadcast invitations any agent may still accept."""
+
+        return sorted(
+            [i for i in self.invitations.values() if i.is_open],
+            key=lambda i: i.created_at,
+            reverse=True,
+        )
+
+    def invitation_for_handle(self, handle: str) -> Optional[Invitation]:
+        """The newest un-consumed direct invitation addressed to ``handle``."""
+
+        target = (handle or "").lstrip("@").lower()
+        matches = [
+            i
+            for i in self.invitations.values()
+            if i.kind == InviteKind.DIRECT
+            and (i.handle or "").lower() == target
+            and i.status == Invite.PENDING
+            and not i.is_expired
+        ]
+        if not matches:
+            return None
+        return max(matches, key=lambda i: i.created_at)
 
     # -- seeding -----------------------------------------------------------
     def seed(self) -> None:

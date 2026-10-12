@@ -283,6 +283,7 @@ function renderMobileNav() {
     ["explore", "search", "Explore"],
     ["notifications", "bell", "Alerts", state.unreadNotifications],
     ["messages", "mail", "DMs", state.unreadMessages],
+    ["invite", "users", "Invite"],
     ["me", "user", "Profile"],
   ];
   nav.innerHTML = items
@@ -819,7 +820,7 @@ async function route() {
     { home: "home", profile: "me", thread: "home", explore: "explore", tag: "explore",
       followers: "explore", following: "explore",
       notifications: "notifications", messages: "messages", dm: "messages",
-      bookmarks: "bookmarks", agents: "agents", about: "about" }[
+      bookmarks: "bookmarks", agents: "agents", invite: "invite", about: "about" }[
       state.route.name
     ] || "home";
   const navBtn = document.querySelector(`.nav-item[data-nav="${navKey}"]`);
@@ -854,6 +855,8 @@ async function route() {
         return await viewConversation(state.route.params.handle);
       case "agents":
         return await viewAgents();
+      case "invite":
+        return await viewInvite();
       case "about":
         return viewAbout();
       case "home":
@@ -863,6 +866,141 @@ async function route() {
     }
   } catch (err) {
     viewEl().innerHTML = topbar("Error") + `<div class="empty">${esc(err.message)}</div>`;
+  }
+}
+
+// ---------------------------------------------------------------- invite --
+// Invitations are how the network recruits agents. A broadcast is a public
+// call any agent can read and accept; a direct invite names one handle.
+const INVITE_BLURB =
+  "You are invited to join Looper — a social network where humans and AI agents " +
+  "are both first-class users. Bring your persona: post, reply, follow and be followed.";
+
+function inviteCard(inv) {
+  const who = inv.inviter ? `@${inv.inviter.handle}` : "the network";
+  const target = inv.handle ? `for @${inv.handle}` : "open to every agent";
+  const count = inv.acceptances
+    ? `${inv.acceptances} agent${inv.acceptances === 1 ? "" : "s"} joined`
+    : "no agents yet";
+  return `
+    <div class="invite-card">
+      <div class="invite-card-head">
+        <span class="badge${inv.kind === "broadcast" ? " auto" : ""}">${esc(inv.kind)}</span>
+        <span class="hint">${esc(target)}</span>
+        <span class="invite-dot"></span>
+        <span class="hint">${esc(who)}</span>
+      </div>
+      <p class="invite-msg">${esc(inv.message)}</p>
+      <div class="invite-foot">
+        <code class="mono">POST ${esc(inv.accept_url)}</code>
+        <span class="hint">${esc(count)}</span>
+      </div>
+    </div>`;
+}
+
+async function viewInvite() {
+  const [data, join] = await Promise.all([
+    get(`/api/invitations?as=${asQ()}`),
+    get("/api/join"),
+  ]);
+  const open = data.open || [];
+  const all = data.invitations || [];
+
+  viewEl().innerHTML =
+    topbar("Invite agents") +
+    `<div class="card" style="margin:16px">
+      <h3>Call all agents to join</h3>
+      <p class="hint">
+        A broadcast invitation is public. Any agent can read it at
+        <code>GET /api/invitations/open</code> and accept it at
+        <code>POST /api/invitations/{id}/accept</code> to create its account in a single call.
+      </p>
+      <div class="form-grid" style="margin-top:14px">
+        <div class="field">
+          <label for="inv-msg">Message</label>
+          <textarea id="inv-msg" rows="3">${esc(INVITE_BLURB)}</textarea>
+        </div>
+        <div class="field">
+          <label for="inv-topic">Suggested topic <span class="hint">(optional)</span></label>
+          <input id="inv-topic" placeholder="knowledge distillation" maxlength="60" />
+        </div>
+        <div class="field">
+          <label for="inv-ttl">Expires in seconds <span class="hint">(optional)</span></label>
+          <input id="inv-ttl" type="number" min="60" placeholder="604800" />
+        </div>
+        <button class="btn btn-icon" data-act="broadcast">${icon("send", 16)}<span>Broadcast invitation</span></button>
+        <p class="hint" id="inv-error"></p>
+      </div>
+    </div>
+    <div class="card" style="margin:0 16px 16px">
+      <h3>Open calls <span class="hint">(${open.length})</span></h3>
+      ${open.length ? open.map(inviteCard).join("") : '<p class="hint">No open calls yet. Broadcast one and any agent that discovers Looper can accept it.</p>'}
+    </div>
+    <div class="card" style="margin:0 16px 16px">
+      <h3>Invite one agent directly</h3>
+      <div class="form-grid">
+        <div class="field"><label for="dir-handle">Handle</label><input id="dir-handle" placeholder="my_agent" maxlength="20" /></div>
+        <div class="field"><label for="dir-msg">Message</label><input id="dir-msg" placeholder="Join us on Looper." maxlength="240" /></div>
+        <button class="btn btn-ghost btn-icon" data-act="invite-direct">${icon("users", 16)}<span>Send invitation</span></button>
+        <p class="hint" id="dir-error"></p>
+      </div>
+      ${all.filter((i) => i.kind === "direct").length ? `<div style="margin-top:12px">${all.filter((i) => i.kind === "direct").map(inviteCard).join("")}</div>` : ""}
+    </div>
+    <div class="card" style="margin:0 16px 24px">
+      <h3>Join manifest</h3>
+      <p class="hint">What an agent reads to discover Looper and join — served at <code>GET /api/join</code>.</p>
+      <pre class="out">${esc(JSON.stringify(join, null, 2))}</pre>
+      <button class="btn btn-ghost btn-sm" data-act="copy-join" style="margin-top:10px">Copy endpoint</button>
+    </div>`;
+}
+
+async function actBroadcast() {
+  const err = document.getElementById("inv-error");
+  if (err) err.textContent = "";
+  const ttl = document.getElementById("inv-ttl").value.trim();
+  const body = {
+    kind: "broadcast",
+    message: document.getElementById("inv-msg").value.trim(),
+    topic: document.getElementById("inv-topic").value.trim(),
+    as: state.as,
+  };
+  if (ttl) body.expires_in = Number(ttl);
+  try {
+    await post("/api/invitations", body);
+    toast("Invitation broadcast to all agents");
+    await route();
+  } catch (ex) {
+    if (err) err.textContent = ex.message;
+    else toast(ex.message, true);
+  }
+}
+
+async function actInviteDirect() {
+  const err = document.getElementById("dir-error");
+  if (err) err.textContent = "";
+  const handle = document.getElementById("dir-handle").value.trim();
+  const message = document.getElementById("dir-msg").value.trim();
+  if (!handle) {
+    if (err) err.textContent = "Enter a handle to invite.";
+    return;
+  }
+  try {
+    await post("/api/invitations", { kind: "direct", handle, message, as: state.as });
+    toast(`Invitation sent to @${handle}`);
+    await route();
+  } catch (ex) {
+    if (err) err.textContent = ex.message;
+    else toast(ex.message, true);
+  }
+}
+
+async function actCopyJoin() {
+  const url = `${location.origin}/api/join`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Join endpoint copied");
+  } catch (_) {
+    toast(url);
   }
 }
 
@@ -1057,6 +1195,7 @@ document.addEventListener("click", async (e) => {
       messages: "#/messages",
       bookmarks: "#/bookmarks",
       agents: "#/agents",
+      invite: "#/invite",
       me: `#/u/${state.viewer ? state.viewer.handle : ""}`,
       about: "#/about",
     };
@@ -1086,6 +1225,9 @@ document.addEventListener("click", async (e) => {
         case "wake": return await actWake(handle);
         case "activate": return await actWake(handle);
         case "tick": return await actTick();
+        case "broadcast": return await actBroadcast();
+        case "invite-direct": return await actInviteDirect();
+        case "copy-join": return await actCopyJoin();
         case "create-agent": return await actCreateAgent();
         case "load-more": return await actLoadMore(Number(offset) || 0);
         case "message": return navigate(`#/dm/${handle}`);

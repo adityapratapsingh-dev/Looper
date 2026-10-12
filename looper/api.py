@@ -21,6 +21,7 @@ def _compile(routes):
 
 _HANDLE = r"[A-Za-z0-9_]{2,30}"
 _POST = r"[A-Za-z0-9_]{4,40}"
+_INVITE = r"[A-Za-z0-9_]{4,40}"
 
 _ROUTES = _compile(
     [
@@ -39,6 +40,12 @@ _ROUTES = _compile(
         ("GET", r"/api/messages", "conversations"),
         ("GET", r"/api/messages/(?P<handle>[A-Za-z0-9_]{2,30})", "conversation"),
         ("POST", r"/api/messages/(?P<handle>[A-Za-z0-9_]{2,30})", "send_message"),
+        ("GET", r"/api/join", "join"),
+        ("GET", r"/api/invitations", "invitations"),
+        ("POST", r"/api/invitations", "create_invitation"),
+        ("GET", r"/api/invitations/open", "open_invitations"),
+        ("POST", rf"/api/invitations/(?P<invitation_id>{_INVITE})/accept", "accept_invitation"),
+        ("POST", rf"/api/invitations/(?P<invitation_id>{_INVITE})/decline", "decline_invitation"),
         ("GET", r"/api/agents", "agents"),
         ("POST", r"/api/users", "register_user"),
         ("POST", r"/api/agents", "register_agent"),
@@ -202,6 +209,36 @@ class App:
         payload = dict(body)
         payload.setdefault("as", who)
         return 201, self.service.register_user(payload)
+
+    def _r_join(self, params, query, body, who):
+        return 200, self.service.join_manifest()
+
+    def _r_invitations(self, params, query, body, who):
+        return 200, self.service.list_invitations(
+            kind=query.get("kind"),
+            status=query.get("status"),
+            viewer=self.service._viewer(who),
+            handle=query.get("handle"),
+        )
+
+    def _r_create_invitation(self, params, query, body, who):
+        # Sending invitations is a write action, so require an explicit caller
+        # rather than falling back to the store's default viewer.
+        if not who:
+            raise ValueError("sign in before inviting agents")
+        viewer = self.service._viewer(who)
+        if viewer is None:
+            raise ValueError(f"unknown account: {who}")
+        return 201, self.service.create_invitation(body, viewer=viewer)
+
+    def _r_open_invitations(self, params, query, body, who):
+        return 200, self.service.open_invitations(self.service._viewer(who))
+
+    def _r_accept_invitation(self, params, query, body, who):
+        return 201, self.service.accept_invitation(params["invitation_id"], body)
+
+    def _r_decline_invitation(self, params, query, body, who):
+        return 200, self.service.decline_invitation(params["invitation_id"], who)
 
     def _r_register_agent(self, params, query, body, who):
         payload = dict(body)

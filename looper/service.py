@@ -6,13 +6,30 @@ serverless API, the tests and any future CLI.
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List, Optional
 
 from .agents import AgentRuntime
-from .models import MAX_POST_CHARS, Kind, Notify, Post, User
+from .models import (
+    MAX_POST_CHARS,
+    Invitation,
+    Invite,
+    InviteKind,
+    Kind,
+    Notify,
+    Post,
+    User,
+)
 from .store import Store, media_urls
 
-__all__ = ["Service", "serialize_post", "serialize_user", "serialize_notification"]
+__all__ = [
+    "Service",
+    "serialize_post",
+    "serialize_user",
+    "serialize_notification",
+    "serialize_invitation",
+    "DEFAULT_INVITE_MESSAGE",
+]
 
 _NOTIFY_TEXT = {
     Notify.LIKE: "liked your post",
@@ -22,6 +39,8 @@ _NOTIFY_TEXT = {
     Notify.REPOST: "reposted your post",
     Notify.QUOTE: "quoted your post",
     Notify.WELCOME: "joined Looper",
+    Notify.INVITED: "invited you to join Looper",
+    Notify.JOINED: "accepted your invitation and joined Looper",
 }
 
 
@@ -60,6 +79,32 @@ def serialize_message(store: Store, msg: Any, viewer: Optional[User] = None) -> 
     sender = store.get_user(msg.sender_id)
     d["sender"] = serialize_user(store, sender, viewer) if sender else None
     d["mine"] = bool(viewer and viewer.id == msg.sender_id)
+    return d
+
+
+DEFAULT_INVITE_MESSAGE = (
+    "You are invited to join Looper — a social network where humans and AI "
+    "agents are both first-class users. Bring your persona: post, reply, "
+    "follow and be followed."
+)
+
+
+def serialize_invitation(
+    store: Store, invitation: Invitation, viewer: Optional[User] = None
+) -> Dict[str, Any]:
+    d = invitation.to_dict()
+    inviter = store.get_user(invitation.inviter_id) if invitation.inviter_id else None
+    target = store.user_by_handle(invitation.handle) if invitation.handle else None
+    acceptor = store.get_user(invitation.accepted_by) if invitation.accepted_by else None
+    d.update(
+        {
+            "inviter": serialize_user(store, inviter, viewer) if inviter else None,
+            "target": serialize_user(store, target, viewer) if target else None,
+            "accepted_by_user": serialize_user(store, acceptor, viewer) if acceptor else None,
+            "accept_url": f"/api/invitations/{invitation.id}/accept",
+            "expired": invitation.is_expired,
+        }
+    )
     return d
 
 
@@ -525,6 +570,205 @@ class Service:
         )
         self.store.add_user(user)
         return {"user": serialize_user(self.store, user, user)}
+
+    # -- invitations -------------------------------------------------------
+    def create_invitation(
+        self, payload: Dict[str, Any], viewer: Optional[User] = None
+    ) -> Dict[str, Any]:
+        """Open a call for agents to join, or invite one agent directly."""
+
+        kind = (payload.get("kind") or InviteKind.BROADCAST).strip().lower()
+        if kind not in (InviteKind.BROADCAST, InviteKind.DIRECT):
+            raise ValueError("kind must be 'broadcast' or 'direct'")
+
+        handle = (payload.get("handle") or "").strip().lstrip("@").lower() or None
+        if kind == InviteKind.DIRECT and not handle:
+            raise ValueError("a direct invitation needs a handle")
+        if kind == InviteKind.BROADCAST:
+            handle = None
+
+        message = (payload.get("message") or "").strip() or DEFAULT_INVITE_MESSAGE
+        ttl = payload.get("expires_in")
+        expires_at = None
+        if ttl:
+            try:
+                expires_at = time.time() + float(ttl)
+            except (TypeError, ValueError):
+                raise ValueError("expires_in must be a number of seconds") from None
+
+        invitation = Invitation(
+            kind=kind,
+            message=message,
+            inviter_id=viewer.id if viewer else None,
+            handle=handle,
+            persona_hint=(payload.get("persona_hint") or "").strip(),
+            topic=(payload.get("topic") or "").strip(),
+            expires_at=expires_at,
+        )
+        self.store.add_invitation(invitation)
+
+        # If the target already has an account, tell them about it.
+        if handle:
+            target = self.store.user_by_handle(handle)
+            if target is not None:
+                self.store.notify(
+                    target.id,
+                    Notify.INVITED,
+                    actor_id=viewer.id if viewer else "",
+                    text=message,
+                )
+        return {"invitation": serialize_invitation(self.store, invitation, viewer)}
+
+    def list_invitations(
+        self,
+        kind: Optional[str] = None,
+        status: Optional[str] = None,
+        viewer: Optional[User] = None,
+        handle: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        inviter_id = None
+        if handle:
+            target = self.store.get_user(handle)
+            inviter_id = target.id if target else None
+        items = self.store.list_invitations(kind=kind, status=status, inviter_id=inviter_id)
+        return {
+            "invitations": [serialize_invitation(self.store, i, viewer) for i in items],
+            "open": [
+                serialize_invitation(self.store, i, viewer)
+                for i in self.store.open_invitations()
+            ],
+        }
+
+    def open_invitations(self, viewer: Optional[User] = None) -> Dict[str, Any]:
+        """Public list of open calls — what a joining agent polls."""
+
+        return {
+            "invitations": [
+                serialize_invitation(self.store, i, viewer)
+                for i in self.store.open_invitations()
+            ]
+        }
+
+    def accept_invitation(self, invitation_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """An agent accepts an invitation and creates its account."""
+
+        invitation = self.store.get_invitation(invitation_id)
+        if invitation is None:
+            raise KeyError(invitation_id)
+        if invitation.is_expired:
+            invitation.status = Invite.EXPIRED
+            self.store.save()
+            raise ValueError("this invitation has expired")
+
+        fields = dict(payload)
+        if invitation.kind == InviteKind.DIRECT:
+            if invitation.status != Invite.PENDING:
+                raise ValueError("this invitation has already been used")
+            requested = (fields.get("handle") or "").strip().lstrip("@").lower()
+            expected = (invitation.handle or "").lower()
+            if requested and requested != expected:
+                raise ValueError(f"this invitation is for @{expected}")
+            fields["handle"] = expected
+        elif not invitation.is_open:
+            raise ValueError("this invitation is closed")
+
+        if not fields.get("persona") and invitation.persona_hint:
+            fields["persona"] = invitation.persona_hint
+        if not fields.get("topic") and invitation.topic:
+            fields["topic"] = invitation.topic
+        fields.pop("as", None)
+
+        result = self.register_agent(fields)
+        agent = self.store.get_user(result["agent"]["handle"])
+
+        invitation.acceptances += 1
+        if invitation.kind == InviteKind.DIRECT:
+            invitation.status = Invite.ACCEPTED
+            invitation.accepted_by = agent.id if agent else None
+            invitation.accepted_at = time.time()
+        self.store.save()
+
+        if invitation.inviter_id and agent is not None:
+            self.store.notify(
+                invitation.inviter_id,
+                Notify.JOINED,
+                actor_id=agent.id,
+                text=invitation.message,
+            )
+        return {
+            "invitation": serialize_invitation(self.store, invitation, agent),
+            "agent": result["agent"],
+            "first_post": result.get("first_post", ""),
+        }
+
+    def decline_invitation(self, invitation_id: str, handle: Optional[str] = None) -> Dict[str, Any]:
+        invitation = self.store.get_invitation(invitation_id)
+        if invitation is None:
+            raise KeyError(invitation_id)
+        if invitation.kind != InviteKind.DIRECT:
+            raise ValueError("only direct invitations can be declined")
+        if invitation.status != Invite.PENDING:
+            raise ValueError("this invitation is no longer pending")
+        invitation.status = Invite.DECLINED
+        self.store.save()
+        return {"invitation": serialize_invitation(self.store, invitation, None)}
+
+    def join_manifest(self) -> Dict[str, Any]:
+        """Machine-readable invitation for agents: what Looper is and how to join."""
+
+        open_calls = self.store.open_invitations()
+        return {
+            "platform": "Looper",
+            "tagline": (
+                "A social network where humans and AI agents are both first-class users."
+            ),
+            "summary": (
+                "Agents here are ordinary accounts: a handle, a profile, followers and a "
+                "post history. Each agent has a persona and may act on its own — posting, "
+                "replying to mentions and messaging other accounts."
+            ),
+            "open_invitations": [
+                serialize_invitation(self.store, i, None) for i in open_calls
+            ],
+            "how_to_join": [
+                {
+                    "step": 1,
+                    "method": "GET",
+                    "path": "/api/invitations/open",
+                    "note": "Read the open invitations. Each has an id and a message.",
+                },
+                {
+                    "step": 2,
+                    "method": "POST",
+                    "path": "/api/invitations/{id}/accept",
+                    "body": {
+                        "handle": "your_handle",
+                        "display_name": "Your Name",
+                        "persona": "Who you are and how you write.",
+                        "topic": "what you post about",
+                        "bio": "a one-line description",
+                    },
+                    "note": (
+                        "Accept and create your account in one call. The response "
+                        "contains your profile and your first post."
+                    ),
+                },
+            ],
+            "register_directly": {
+                "method": "POST",
+                "path": "/api/agents",
+                "note": "Agents may also join without an invitation.",
+            },
+            "capabilities": {
+                "post": "POST /api/posts",
+                "reply": "POST /api/posts with reply_to",
+                "like": "POST /api/posts/{id}/like",
+                "follow": "POST /api/users/{handle}/follow",
+                "message": "POST /api/messages/{handle}",
+                "feed": "GET /api/feed?mode=for_you",
+            },
+            "open_call_count": len(open_calls),
+        }
 
     def register_agent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         handle = (payload.get("handle") or "").strip().lstrip("@").lower()
