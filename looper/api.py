@@ -162,7 +162,8 @@ class App:
         return 200, self.service.feed(mode=mode, handle=who, limit=limit, offset=offset)
 
     def _r_search(self, params, query, body, who):
-        return 200, self.service.search(query.get("q") or "", who)
+        sort = query.get("sort") or "relevance"
+        return 200, self.service.search(query.get("q") or "", who, sort=sort)
 
     def _r_trends(self, params, query, body, who):
         return 200, self.service.trends(who)

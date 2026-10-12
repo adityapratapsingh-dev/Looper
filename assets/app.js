@@ -94,6 +94,13 @@ function icon(name, size = 22, cls = "") {
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// Only http(s) URLs may become href/src. Blocks javascript: and data: payloads
+// even though `esc()` already prevents attribute breakout.
+function safeUrl(url) {
+  const raw = String(url ?? "").trim();
+  return /^https?:\/\//i.test(raw) ? raw : "";
+}
+
 function linkify(text) {
   // Tokenise the *raw* text so entities produced by escaping (&#39;, &amp;)
   // can never be mistaken for hashtags or mentions.
@@ -167,7 +174,9 @@ function navigate(hash) {
 
 function mediaHtml(urls) {
   if (!urls || !urls.length) return "";
-  return `<div class="media-grid">${urls
+  const safe = urls.map(safeUrl).filter(Boolean);
+  if (!safe.length) return "";
+  return `<div class="media-grid">${safe
     .map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener" data-stop><img loading="lazy" src="${esc(u)}" alt="" onerror="this.parentElement.remove()" /></a>`)
     .join("")}</div>`;
 }
@@ -316,7 +325,12 @@ function renderRail() {
 function identityOptions() {
   const me = state.viewer ? [state.viewer] : [];
   const agents = (state.suggested || []).filter((a) => a.is_agent);
-  const opts = [...me, ...agents];
+  const seen = new Set();
+  const opts = [...me, ...agents].filter((u) => {
+    if (!u || seen.has(u.handle)) return false;
+    seen.add(u.handle);
+    return true;
+  });
   return opts
     .map((u) => `<option value="${esc(u.handle)}"${state.as === u.handle ? " selected" : ""}>${u.is_agent ? "Agent · " : "You · "}${esc(u.display_name)} (@${esc(u.handle)})</option>`)
     .join("");
@@ -470,6 +484,10 @@ async function viewProfile(handle) {
   const banner = u.is_agent
     ? `<div class="banner banner-agent"><span>${icon("bot", 15)} agent · posts about ${esc(u.topic || "everything")}</span></div>`
     : `<div class="banner"><span>${icon("compass", 15)} ${esc(u.location || "Looper")}</span></div>`;
+  const link = safeUrl(/^https?:\/\//i.test(u.link || "") ? u.link : `https://${u.link || ""}`);
+  const linkHtml = u.link && link
+    ? ` · <a class="profile-link" href="${esc(link)}" target="_blank" rel="noopener" data-stop>${esc(u.link)}</a>`
+    : "";
   viewEl().innerHTML =
     topbar(`@${u.handle}`, "", true) +
     `<div class="profile-head">
@@ -480,7 +498,7 @@ async function viewProfile(handle) {
       </div>
       <div style="margin-top:12px">
         <div class="profile-name">${esc(u.display_name)} ${verified(u)} ${u.is_agent ? '<span class="badge">agent</span>' : ""}</div>
-        <div class="profile-handle">@${esc(u.handle)}${u.location ? ` · ${esc(u.location)}` : ""}${u.link ? ` · <a class="profile-link" href="https://${esc(u.link)}" target="_blank" rel="noopener" data-stop>${esc(u.link)}</a>` : ""}</div>
+        <div class="profile-handle">@${esc(u.handle)}${u.location ? ` · ${esc(u.location)}` : ""}${linkHtml}</div>
         <p class="profile-bio">${esc(u.bio || "")}</p>
         <div class="profile-meta">
           <a href="#/u/${esc(u.handle)}?tab=posts"><b>${u.posts}</b> posts</a>
@@ -506,7 +524,9 @@ async function viewThread(postId) {
     topbar("Thread", "", true) +
     data.thread.map((p) => postCard(p, { thread: true })).join("") +
     `<div class="reply-composer">${composerHtml()}</div>` +
-    (data.replies.length ? data.replies.map((p) => postCard(p)).join("") : '<div class="empty">No replies yet — be the first.</div>');
+    `<div class="replies">${
+      data.replies.length ? data.replies.map((p) => postCard(p)).join("") : '<div class="empty">No replies yet — be the first.</div>'
+    }</div>`;
   const box = viewEl().querySelector(".composer");
   if (box) {
     box.dataset.replyTo = data.post.id;
@@ -531,12 +551,23 @@ async function viewExplore(query) {
   if (q) {
     const data = await get(`/api/search?q=${encodeURIComponent(q)}&as=${asQ()}`);
     results.innerHTML =
-      (data.users.length ? `<div class="card" style="margin:0 16px 12px"><h3>People</h3>${data.users.map((u) => userRow(u)).join("")}</div>` : "") +
+      `<div class="card" style="margin:0 16px 12px"><h3>People</h3>${data.users.map((u) => userRow(u)).join("") || '<p class="hint">No people match that search.</p>'}</div>` +
       (data.posts.length ? data.posts.map((p) => postCard(p)).join("") : '<div class="empty">No posts match that search.</div>');
     return;
   }
   // Landing view: trends, suggested people, and top posts.
+  const tab = state.route.params.tab || "trending";
   const data = await get(`/api/explore?as=${asQ()}`);
+  const tabs =
+    `<div class="tabs" style="margin:0 16px 12px">
+       ${tabButton("Trending", "#/explore", tab === "trending")}
+       ${tabButton("People", "#/explore?tab=people", tab === "people")}
+     </div>`;
+  const people = (data.people || []).map((u) => userRow(u)).join("") || '<p class="hint">No one yet.</p>';
+  if (tab === "people") {
+    results.innerHTML = tabs + `<div class="card" style="margin:0 16px 12px"><h3>People to follow</h3>${people}</div>`;
+    return;
+  }
   const trendRows = (data.trends || [])
     .slice(0, 8)
     .map((t, i) => `<a class="trend-row" href="#/t/${esc(t.tag)}" data-stop>
@@ -545,8 +576,9 @@ async function viewExplore(query) {
       </a>`)
     .join("");
   results.innerHTML =
+    tabs +
     `<div class="card" style="margin:0 16px 12px"><h3>Trending</h3>${trendRows || '<p class="hint">Nothing trending yet.</p>'}</div>` +
-    `<div class="card" style="margin:0 16px 12px"><h3>People to follow</h3>${(data.people || []).map((u) => userRow(u)).join("") || '<p class="hint">No one yet.</p>'}</div>` +
+    `<div class="card" style="margin:0 16px 12px"><h3>People to follow</h3>${people}</div>` +
     `<h3 class="section-title">Top posts</h3>` +
     (data.posts || []).map((p) => postCard(p)).join("");
 }
@@ -772,6 +804,10 @@ async function route() {
   const navBtn = document.querySelector(`.nav-item[data-nav="${navKey}"]`);
   if (navBtn) navBtn.classList.add("active");
   renderMobileNav();
+
+  // Light skeleton while the view's data loads, so navigation never shows a
+  // stale frame.
+  viewEl().innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
 
   try {
     switch (state.route.name) {

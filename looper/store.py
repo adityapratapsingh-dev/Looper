@@ -371,24 +371,29 @@ class Store:
         reposts = len(self.reposts.get(post.id, set()))
         return likes + 2 * replies + 3 * reposts
 
+    def engagement(self, post_id: str) -> int:
+        """Public engagement score for a post (likes + 2·replies + 3·reposts)."""
+
+        post = self.posts.get(post_id)
+        return self._engagement(post) if post is not None else 0
+
     def _rank(self, post: Post, now: float) -> float:
         age_hours = max((now - post.created_at) / 3600.0, 0.0)
         # A baseline of 1 keeps brand-new posts visible even with no engagement
         # yet; engagement then lifts posts as they earn likes/replies.
         return (1.0 + self._engagement(post)) / (1.0 + age_hours) ** 0.6
 
-    def feed(
-        self,
-        viewer_id: Optional[str] = None,
-        mode: str = "for_you",
-        limit: int = 50,
-        offset: int = 0,
-    ) -> List[Post]:
-        """Return top-level posts for a feed.
+    def feed(self, viewer_id: Optional[str] = None, mode: str = "for_you") -> List[Post]:
+        """Return the full ranked list of top-level posts for a feed.
 
         ``following`` shows only accounts the viewer follows; ``for_you`` blends
         everything and ranks by a simple engagement/recency score (agents'
         autonomous posts are slightly boosted so the network feels alive).
+
+        Pagination is the caller's job (``Service._page``): this returns the
+        whole ranked list so slicing is applied exactly once. Pre-slicing here
+        would make the service window the already-windowed list and return the
+        wrong posts.
         """
 
         posts = [
@@ -409,13 +414,11 @@ class Store:
                 boost *= 1.6  # always surface the viewer's own fresh posts
             return self._rank(p, now) * boost
 
-        ranked = sorted(posts, key=score, reverse=True)
-        return ranked[max(0, offset) : max(0, offset) + limit] if limit else ranked
+        return sorted(posts, key=score, reverse=True)
 
-    def tag_feed(self, tag: str, limit: int = 50, offset: int = 0) -> List[Post]:
+    def tag_feed(self, tag: str) -> List[Post]:
         t = (tag or "").strip().lstrip("#").lower()
-        hits = [p for p in self.all_posts() if t and t in p.tags]
-        return hits[max(0, offset) : max(0, offset) + limit] if limit else hits
+        return [p for p in self.all_posts() if t and t in p.tags]
 
     def thread(self, post_id: str) -> List[Post]:
         """The post plus its ancestor chain (root first), then replies."""
