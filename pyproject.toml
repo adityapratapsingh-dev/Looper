@@ -15,7 +15,7 @@ keywords = ["social", "agents", "twitter", "feed", "serverless"]
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
+dev = ["pytest>=9.1.1", "pytest-cov>=7.1.0", "ruff>=0.17.0"]
 
 [project.scripts]
 looper = "looper.serve:main"
